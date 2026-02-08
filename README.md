@@ -1,5 +1,7 @@
 # Halka — Headless Rich Text Kernel
 
+[Show me demo](https://halkaeditor.pages.dev/)
+
 Halka is a framework-agnostic, DOM-centric rich text editor core. It provides a robust headless API to build toolbars, plugins, and UIs while keeping the DOM clean and semantic.
 
 - Core focus: minimal DOM mutations, strong selection stability, strict normalization.
