@@ -49,7 +49,7 @@
 			<div class="flex items-center gap-2">
 				<Button
 					size="sm"
-					onclick={() => window.open('https://github.com/hasinoor/halkaeditor', '_blank')}
+					onclick={() => window.open('https://github.com/hasinoorit/halka', '_blank')}
 					>GitHub</Button
 				>
 			</div>

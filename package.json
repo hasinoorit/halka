@@ -7,7 +7,7 @@
 	},
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && npm run prepack",
+		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"prepack": "svelte-kit sync && svelte-package && publint",
@@ -90,6 +90,7 @@
 		"@eslint/js": "^9.39.1",
 		"@playwright/test": "^1.57.0",
 		"@sveltejs/adapter-auto": "^7.0.0",
+		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.49.1",
 		"@sveltejs/package": "^2.5.7",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
@@ -110,13 +111,13 @@
 		"publint": "^0.3.15",
 		"svelte": "^5.45.6",
 		"svelte-check": "^4.3.4",
+		"tailwind-merge": "^3.4.0",
 		"tailwindcss": "^4.1.17",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.48.1",
 		"vite": "^7.2.6",
 		"vitest": "^4.0.15",
-		"vitest-browser-svelte": "^2.0.1",
-		"tailwind-merge": "^3.4.0"
+		"vitest-browser-svelte": "^2.0.1"
 	},
 	"keywords": [
 		"svelte"
