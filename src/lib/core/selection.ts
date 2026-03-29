@@ -172,8 +172,14 @@ export class HalkaSelection {
 	 * @returns IDs of the start and end markers
 	 */
 	createMarkers(): { startId: string; endId: string } | null {
-		const range = this.range;
-		if (!range) return null;
+		// Get range directly from window selection to avoid side effects
+		const nativeSel = this.editor.window.getSelection();
+		if (!nativeSel || nativeSel.rangeCount === 0) return null;
+		const liveRange = nativeSel.getRangeAt(0);
+		if (!this.editor.root.contains(liveRange.commonAncestorContainer)) return null;
+
+		// Clone so we can work with stable positions without mutating the live range
+		const range = liveRange.cloneRange();
 
 		const startId = `start-${Math.random().toString(36).substr(2, 9)}`;
 		const endId = `end-${Math.random().toString(36).substr(2, 9)}`;
@@ -191,14 +197,22 @@ export class HalkaSelection {
 		endMarker.dataset.halkaCollapsed = wasCollapsed ? 'true' : 'false';
 		endMarker.style.display = 'none';
 
-		// Insert end marker first to avoids invalidating start offset if collapsed
+		// Insert end marker first (at the collapsed-false end of range)
 		const endRange = range.cloneRange();
 		endRange.collapse(false);
 		endRange.insertNode(endMarker);
 
-		const startRange = range.cloneRange();
-		startRange.collapse(true);
-		startRange.insertNode(startMarker);
+		// Insert start marker — for collapsed ranges, start === end so we insert
+		// relative to the end marker to be safe
+		if (wasCollapsed) {
+			// Re-use endMarker position as start (they are the same point)
+			// Place start marker directly before end marker
+			endMarker.parentNode?.insertBefore(startMarker, endMarker);
+		} else {
+			const startRange = range.cloneRange();
+			startRange.collapse(true);
+			startRange.insertNode(startMarker);
+		}
 
 		return { startId, endId };
 	}
@@ -216,7 +230,8 @@ export class HalkaSelection {
 			return;
 		}
 
-		const range = document.createRange();
+		// Use the editor's own document — critical for iframe-based editors
+		const range = this.editor.window.document.createRange();
 		const collapsed = startMarkerEl.dataset.halkaCollapsed === 'true';
 
 		if (collapsed) {

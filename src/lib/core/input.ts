@@ -1,12 +1,16 @@
 import type { Editor } from './editor.js';
 
 export class InputManager {
+	// Store bound handler so destroy() can properly remove it
+	private boundHandleBeforeInput: (event: InputEvent) => void;
+
 	constructor(private editor: Editor) {
+		this.boundHandleBeforeInput = this.handleBeforeInput.bind(this);
 		this.init();
 	}
 
 	private init() {
-		this.editor.root.addEventListener('beforeinput', this.handleBeforeInput.bind(this));
+		this.editor.root.addEventListener('beforeinput', this.boundHandleBeforeInput);
 	}
 
 	private handleBeforeInput(event: InputEvent) {
@@ -45,6 +49,6 @@ export class InputManager {
 	}
 
 	destroy() {
-		this.editor.root.removeEventListener('beforeinput', this.handleBeforeInput.bind(this));
+		this.editor.root.removeEventListener('beforeinput', this.boundHandleBeforeInput);
 	}
 }

@@ -427,10 +427,24 @@ function findTextPositionAtOffset(
 ): { node: Text; offsetInNode: number } | null {
 	const doc = editor.ownerDocument;
 
-	// Custom filter to ignore text nodes with 0 length
+	// Skip text nodes inside contenteditable=false (e.g. footnote citations, footnote list)
+	// so that offset counting only accounts for the editable content the user sees.
 	const filter = {
 		acceptNode(node: Node) {
-			return (node as Text).data.length > 0 ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+			// Reject zero-length text nodes
+			if ((node as Text).data.length === 0) return NodeFilter.FILTER_REJECT;
+			// Walk up to check for contenteditable=false ancestors
+			let parent: Node | null = node.parentNode;
+			while (parent && parent !== editor) {
+				if (
+					parent instanceof HTMLElement &&
+					parent.getAttribute('contenteditable') === 'false'
+				) {
+					return NodeFilter.FILTER_REJECT;
+				}
+				parent = parent.parentNode;
+			}
+			return NodeFilter.FILTER_ACCEPT;
 		}
 	};
 

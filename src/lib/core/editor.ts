@@ -186,7 +186,7 @@ export abstract class Editor {
 	abstract toggleBlockFormat(format: string): void;
 	abstract normalizeSelection(): void;
 	abstract normalizeHTML(): void;
-	abstract applySelection(): void;
+	abstract applySelection(forceRestore?: boolean): void;
 	abstract createEl<K extends keyof HTMLElementTagNameMap>(
 		tagName: K,
 		options?: ElementCreationOptions
@@ -261,10 +261,16 @@ export class HalkaEditor extends Editor {
 	private handleKeydownBound: (event: KeyboardEvent) => void;
 	private handleSelectionChangeBound: () => void;
 	private handleBlurBound: () => void;
+	private handleFocusBound: () => void;
 	private savedSelectionRange: Range | undefined;
 	private savedSelectionOffsets: { start: number; end: number } | undefined;
 	private activeFormats: Record<string, boolean> = {};
 	private activeStyles: Record<string, string> = {};
+	/**
+	 * Set by setSelection() inside a runTransaction callback to prevent
+	 * the transaction epilogue from overwriting the explicitly-set cursor.
+	 */
+	private _transactionSetSelection = false;
 
 	constructor(root: HTMLElement, options: HalkaOptions = {}) {
 		super(root);
@@ -280,6 +286,7 @@ export class HalkaEditor extends Editor {
 		this.handleKeydownBound = (event) => this.handleKeydown(event);
 		this.handleSelectionChangeBound = () => this.updateActiveFormatsAndStyles();
 		this.handleBlurBound = () => this.saveSelection();
+		this.handleFocusBound = () => this.handleFocus();
 
 		if (this.options.shortcuts) {
 			this.root.addEventListener('keydown', this.handleKeydownBound);
@@ -290,7 +297,7 @@ export class HalkaEditor extends Editor {
 
 		document.addEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.addEventListener('blur', this.handleBlurBound);
-		this.root.addEventListener('focus', () => this.handleFocus());
+		this.root.addEventListener('focus', this.handleFocusBound);
 
 		this.pluginCleanups = (this.options.plugins ?? []).map((plugin) => plugin(this));
 		this.registerDefaultNormalizers();
@@ -411,8 +418,29 @@ export class HalkaEditor extends Editor {
 	}
 
 	getRange(): Range {
-		const selection = this.getSelection();
-		return selection!.getRangeAt(0);
+		// Try to get a live range from the current window selection first
+		const selection = this.window.getSelection();
+		if (selection && selection.rangeCount > 0) {
+			const range = selection.getRangeAt(0);
+			if (this.root.contains(range.commonAncestorContainer)) {
+				return range;
+			}
+		}
+		// Fall back to restoring saved selection if the live one is outside root
+		if (this.savedSelectionOffsets) {
+			const sel = this.window.getSelection();
+			if (sel) {
+				RangeHelpers.restoreSelectionByOffsets(
+					sel,
+					this.root,
+					this.savedSelectionOffsets.start,
+					this.savedSelectionOffsets.end
+				);
+				if (sel.rangeCount > 0) return sel.getRangeAt(0);
+			}
+		}
+		// Final safe fallback: collapsed range at end of editor
+		return this.createCollapsedRangeAtEnd();
 	}
 
 	getSelection(): Selection | null {
@@ -437,6 +465,8 @@ export class HalkaEditor extends Editor {
 		selection.removeAllRanges();
 		selection.addRange(range);
 		this.selection.normalize();
+		// Signal to runTransaction epilogue: do NOT override this with applySelection()
+		this._transactionSetSelection = true;
 	}
 
 	getSelectionOffsets(): { start: number; end: number } | undefined {
@@ -546,8 +576,8 @@ export class HalkaEditor extends Editor {
 				NodeHelpers.copyPasteChildNodes(newBlock, currentBlock);
 				this.root.replaceChild(newBlock, currentBlock);
 			});
-
-			this.savedSelectionRange = undefined;
+			// Do NOT reset savedSelectionRange here — preserveSelection already
+			// restored the cursor via markers; resetting would break applySelection.
 		});
 	}
 
@@ -572,10 +602,10 @@ export class HalkaEditor extends Editor {
 		}
 	}
 
-	applySelection(): void {
+	applySelection(forceRestore: boolean = false): void {
 		const selection = this.window.getSelection();
 		const currentRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-		if (currentRange && this.root.contains(currentRange.commonAncestorContainer)) {
+		if (!forceRestore && currentRange && this.root.contains(currentRange.commonAncestorContainer)) {
 			this.selection.normalize();
 			return;
 		}
@@ -594,9 +624,20 @@ export class HalkaEditor extends Editor {
 
 	runTransaction(cb: (editor: Editor) => void): void {
 		const beforeHTML = this.getHTML();
-		this.root.focus()
-		this.getSelection();
+
+		// Save selection BEFORE focus() so we capture the last known user caret
 		this.saveSelection();
+		this.root.focus();
+
+		// Force restore selection BEFORE running the callback to guarantee that
+		// if the callback calls getRange() it gets the correct coordinates, skipping
+		// over any DOM mutation that might have reset the native selection to 0.
+		this.applySelection(true);
+
+		// Reset the "explicit cursor set" flag before the callback runs.
+		// If the callback calls setSelection(), this will be set to true and we
+		// will NOT call applySelection() in the epilogue (which would overwrite it).
+		this._transactionSetSelection = false;
 
 		cb(this);
 
@@ -640,7 +681,14 @@ export class HalkaEditor extends Editor {
 
 		const afterHTML = this.getHTML();
 		if (afterHTML !== beforeHTML || merged) {
-			this.applySelection();
+			// Only restore saved selection if the callback did NOT set its own.
+			// If setSelection() was called inside cb(), _transactionSetSelection is true
+			// and we must NOT overwrite the cursor the operation explicitly placed.
+			if (!this._transactionSetSelection) {
+				// forceRestore=true ensures we ignore the native browser selection
+				// which may have been reset to index 0 by the DOM mutations taking place.
+				this.applySelection(true);
+			}
 			if (afterHTML !== beforeHTML) {
 				this.normalizeHTML();
 				this.emit('change', this.getHTML());
@@ -657,7 +705,8 @@ export class HalkaEditor extends Editor {
 
 		document.removeEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.removeEventListener('blur', this.handleBlurBound);
-		this.root.removeEventListener('focus', () => this.handleFocus());
+		// Use stored bound reference — anonymous arrow in old code was never removable
+		this.root.removeEventListener('focus', this.handleFocusBound);
 
 		for (const cleanup of this.pluginCleanups) {
 			cleanup();
@@ -752,25 +801,43 @@ export class HalkaEditor extends Editor {
 	}
 
 	computeSelectionOffsets(range: Range): { start: number; end: number } | undefined {
+		// Count only editable text: skip contenteditable=false subtrees so that
+		// save and restore offsets are symmetric with findTextPositionAtOffset.
+		const countEditableText = (node: Node): number => {
+			if (node instanceof HTMLElement && node.getAttribute('contenteditable') === 'false') {
+				return 0;
+			}
+			if (node.nodeType === Node.TEXT_NODE) {
+				return (node as Text).data.length;
+			}
+			let total = 0;
+			for (let i = 0; i < node.childNodes.length; i++) {
+				total += countEditableText(node.childNodes[i]);
+			}
+			return total;
+		};
+
 		const startRange = range.cloneRange();
 		startRange.selectNodeContents(this.root);
 		startRange.setEnd(range.startContainer, range.startOffset);
-		const start = NodeHelpers.getTextLength(startRange.cloneContents());
+		const start = countEditableText(startRange.cloneContents());
 
 		const endRange = range.cloneRange();
 		endRange.selectNodeContents(this.root);
 		endRange.setEnd(range.endContainer, range.endOffset);
-		const end = NodeHelpers.getTextLength(endRange.cloneContents());
+		const end = countEditableText(endRange.cloneContents());
 		return { start, end };
 	}
 
 	private saveSelection(): void {
-		const selection = this.getSelection();
-		if (selection) {
-			const range = selection.getRangeAt(0);
-			this.savedSelectionRange = range.cloneRange();
-			this.savedSelectionOffsets = this.computeSelectionOffsets(range);
-		}
+		// Use window.getSelection() directly — NOT this.getSelection() which has
+		// side-effects (calls applySelection) that corrupt the value being saved.
+		const selection = this.window.getSelection();
+		if (!selection || selection.rangeCount === 0) return;
+		const range = selection.getRangeAt(0);
+		if (!this.root.contains(range.commonAncestorContainer)) return;
+		this.savedSelectionRange = range.cloneRange();
+		this.savedSelectionOffsets = this.computeSelectionOffsets(range);
 	}
 
 	private getInlineTagName(format: string): string | undefined {
