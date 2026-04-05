@@ -1,4 +1,4 @@
-import { Node as NodeHelpers } from '../helpers/index.js';
+import { Node as NodeHelpers, isElementNode } from '../helpers/index.js';
 import { type Editor, definePlugin } from '../core/editor.js';
 
 const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): void => {
@@ -15,15 +15,15 @@ const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): 
 		let list: HTMLElement | null = null;
 
 		while (node && node !== root) {
-			if (node instanceof HTMLElement && node.tagName === 'LI' && !listItem) {
-				listItem = node;
+			if (isElementNode(node) && (node as HTMLElement).tagName === 'LI' && !listItem) {
+				listItem = node as HTMLElement;
 			}
 			if (
-				node instanceof HTMLElement &&
-				(node.tagName === 'UL' || node.tagName === 'OL') &&
+				isElementNode(node) &&
+				((node as HTMLElement).tagName === 'UL' || (node as HTMLElement).tagName === 'OL') &&
 				!list
 			) {
-				list = node;
+				list = node as HTMLElement;
 			}
 			node = node.parentElement;
 		}
@@ -58,10 +58,11 @@ const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): 
 		}
 
 		const rootList = root.firstElementChild;
-		if (rootList instanceof HTMLElement && rootList.tagName === targetTag) {
+		if (isElementNode(rootList) && (rootList as HTMLElement).tagName === targetTag) {
+			const el = rootList as HTMLElement;
 			editor.selection.preserveSelection(() => {
-				const items = Array.from(rootList.children).filter(
-					(child) => child instanceof HTMLElement && child.tagName === 'LI'
+				const items = Array.from(el.children).filter(
+					(child) => isElementNode(child) && (child as HTMLElement).tagName === 'LI'
 				) as HTMLElement[];
 
 				for (const item of items) {
@@ -70,10 +71,10 @@ const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): 
 						paragraph.setAttribute('style', item.getAttribute('style') ?? '');
 					}
 					NodeHelpers.copyPasteChildNodes(paragraph, item);
-					rootList.parentElement?.insertBefore(paragraph, rootList);
+					el.parentElement?.insertBefore(paragraph, el);
 				}
 
-				rootList.remove();
+				el.remove();
 			});
 			return;
 		}
@@ -88,10 +89,10 @@ const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): 
 			const index = Math.max(0, range.startOffset - 1);
 			const candidate = root.childNodes[index] as Node | undefined;
 
-			if (candidate instanceof HTMLElement) {
-				block = candidate;
+			if (isElementNode(candidate)) {
+				block = candidate as HTMLElement;
 			} else if (candidate) {
-				block = NodeHelpers.getClosestBlockElement(candidate, root);
+				block = NodeHelpers.getClosestBlockElement(candidate, root) as HTMLElement | null;
 			}
 		}
 
@@ -135,8 +136,8 @@ const indentList = (editor: Editor): void => {
 			// Let's assume standard LI check.
 			let parent = range.commonAncestorContainer;
 			while (parent && parent !== root) {
-				if (parent instanceof HTMLElement && parent.tagName === 'LI') {
-					listItem = parent;
+				if (isElementNode(parent) && (parent as HTMLElement).tagName === 'LI') {
+					listItem = parent as HTMLElement;
 					break;
 				}
 				parent = parent.parentElement as Node;
@@ -165,7 +166,7 @@ const indentList = (editor: Editor): void => {
 
 		// Restore caret precisely when original selection was collapsed
 		if (wasCollapsed && startContainer) {
-			const newRange = document.createRange();
+			const newRange = editor.window.document.createRange();
 			try {
 				newRange.setStart(startContainer, startOffset);
 			} catch {
@@ -195,8 +196,8 @@ const outdentList = (editor: Editor): void => {
 		let listItem: HTMLElement | null = null;
 		let parent = range.commonAncestorContainer;
 		while (parent && parent !== root) {
-			if (parent instanceof HTMLElement && parent.tagName === 'LI') {
-				listItem = parent;
+			if (isElementNode(parent) && (parent as HTMLElement).tagName === 'LI') {
+				listItem = parent as HTMLElement;
 				break;
 			}
 			parent = parent.parentElement as Node;
@@ -223,7 +224,7 @@ const outdentList = (editor: Editor): void => {
 				}
 				// Restore caret precisely when original selection was collapsed
 				if (wasCollapsed && startContainer) {
-					const newRange = document.createRange();
+					const newRange = editor.window.document.createRange();
 					try {
 						newRange.setStart(startContainer, startOffset);
 					} catch {
@@ -248,8 +249,9 @@ const outdentList = (editor: Editor): void => {
 		const nestedLists: HTMLElement[] = [];
 		
 		children.forEach(child => {
-			if (child instanceof HTMLElement && (child.tagName === 'UL' || child.tagName === 'OL')) {
-				nestedLists.push(child);
+			const el = child as HTMLElement;
+			if (isElementNode(child) && (el.tagName === 'UL' || el.tagName === 'OL')) {
+				nestedLists.push(el);
 			} else {
 				paragraph.appendChild(child);
 			}
@@ -287,7 +289,7 @@ const outdentList = (editor: Editor): void => {
 
 		// Restore caret precisely when original selection was collapsed
 		if (wasCollapsed && startContainer) {
-			const newRange = document.createRange();
+			const newRange = editor.window.document.createRange();
 			try {
 				newRange.setStart(startContainer, startOffset);
 			} catch {

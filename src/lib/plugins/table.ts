@@ -1,5 +1,5 @@
 import type { HalkaPlugin, CommandHandler } from '../core/editor.js';
-import { Node as NodeHelpers } from '../helpers/index.js';
+import { Node as NodeHelpers, isElementNode } from '../helpers/index.js';
 
 type TableInsertCommandPayload = {
 	rows?: number;
@@ -40,8 +40,8 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 	const root = editor.root;
 	const getActiveCell = () => {
 		const node = editor.getRange().commonAncestorContainer;
-		if (node instanceof HTMLTableCellElement) {
-			return node;
+		if (isElementNode(node) && (node.tagName === 'TD' || node.tagName === 'TH')) {
+			return node as HTMLTableCellElement;
 		}
 		return (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest?.('td, th, table') as HTMLElement | null;
 	};

@@ -39,10 +39,11 @@ const getClosestBlockElement = (node: Node | null, root: HTMLElement): HTMLEleme
 	if (!node) return null;
 	const parents = getParentElementsUntil(node, root);
 	for (const ancestor of parents) {
-		if (ancestor instanceof HTMLElement) {
-			const display = getComputedStyle(ancestor).display;
+		if (isElementNode(ancestor)) {
+			const el = ancestor as HTMLElement;
+			const display = getComputedStyle(el).display;
 			if (display !== 'inline') {
-				return ancestor;
+				return el;
 			}
 		}
 	}
@@ -51,7 +52,7 @@ const getClosestBlockElement = (node: Node | null, root: HTMLElement): HTMLEleme
 
 const isSelfClosing = (node: Node): boolean => {
 	if (node.nodeType === Node.TEXT_NODE) return false;
-	if (!(node instanceof Element)) return false;
+	if (!isElementNode(node)) return false;
 	return SELF_CLOSING_TAGS.includes(
 		node.tagName.toLowerCase() as (typeof SELF_CLOSING_TAGS)[number]
 	);
@@ -81,7 +82,7 @@ const wrapInWith = (dom: Node, wrapperDOM: HTMLElement): Node => {
 	if (dom.nodeType === Node.TEXT_NODE) return dom;
 	if (isSelfClosing(dom)) return dom;
 	copyPasteChildNodes(wrapperDOM, dom as Node & ParentNode);
-	if (dom instanceof HTMLElement || dom instanceof DocumentFragment) {
+	if (isElementNode(dom) || dom.nodeType === 11) {
 		dom.appendChild(wrapperDOM);
 	}
 	return dom;

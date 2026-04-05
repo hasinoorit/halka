@@ -34,7 +34,7 @@ const isWrappedWith = (
 	}
 
 	if (parentDOM) {
-		if (!(node instanceof Node) || !parentDOM.contains(node)) return false;
+		if (!node || !parentDOM.contains(node)) return false;
 		return getParentsUntil(range.commonAncestorContainer, parentDOM).some(
 			(element) => (element as Element).tagName === tagName
 		);
@@ -54,16 +54,16 @@ const isWrappedWithClassName = (
 	if (!range) return;
 
 	const dom = isSelectedWholeContentAnElement(win);
-	if (dom && dom instanceof Element && dom.classList.contains(className)) return true;
+	if (isElementNode(dom) && dom.classList.contains(className)) return true;
 
 	const node = range.commonAncestorContainer;
 	if (parentDOM) {
 		return getParentElementsUntil(node, parentDOM).some(
-			(node) => node instanceof Element && node.classList.contains(className)
+			(node) => isElementNode(node) && node.classList.contains(className)
 		);
 	} else {
 		return getParentElements(node).some(
-			(node) => node instanceof Element && node.classList.contains(className)
+			(node) => isElementNode(node) && node.classList.contains(className)
 		);
 	}
 };
@@ -79,7 +79,7 @@ const isSelectedAnElement = (range: Range): Element | undefined => {
 	if (elementNodes.some((node: Node) => node.nodeType === Node.TEXT_NODE)) return;
 	const startContainer = range.startContainer as Node & ParentNode;
 	return (elementNodes.length === 1 &&
-		startContainer.childNodes[range.startOffset] instanceof Element &&
+		isElementNode(startContainer.childNodes[range.startOffset]) &&
 		(startContainer.childNodes[range.startOffset] as Element)) as Element | undefined;
 };
 
@@ -173,7 +173,7 @@ const wholeNestedElements = (range: Range): Node[] | undefined => {
 	let currentElement: Node | null = selectedElement;
 
 	while (
-		currentElement instanceof Element &&
+		isElementNode(currentElement) &&
 		currentElement.parentElement &&
 		currentElement.parentElement.childNodes.length === 1
 	) {
@@ -184,7 +184,7 @@ const wholeNestedElements = (range: Range): Node[] | undefined => {
 	currentElement = selectedElement;
 
 	while (
-		currentElement instanceof Element &&
+		isElementNode(currentElement) &&
 		currentElement.childNodes.length === 1 &&
 		currentElement.firstChild
 	) {
@@ -208,9 +208,12 @@ const splitText = (win?: Window): [Text, Text] | undefined => {
 const nextSlice = (
 	node: Node,
 	until: string | { tagName: string; className?: string },
-	newEl: Node = document.createTextNode(''),
-	childEl: Node = document.createTextNode('\u200B')
+	newEl?: Node,
+	childEl?: Node
 ): [Node, Node, Node | DocumentFragment] => {
+	const doc = node.ownerDocument ?? document;
+	if (!newEl) newEl = doc.createTextNode('');
+	if (!childEl) childEl = doc.createTextNode('\u200B');
 	const parentElement = node.parentElement;
 	if (!parentElement) {
 		return [node, childEl, new DocumentFragment()];
@@ -260,7 +263,7 @@ const undo = (
 	const nested = wholeNestedElements(range);
 	if (nested) {
 		const matching = nested.find(
-			(node) => node instanceof Element && matchElements(node, until)
+			(node) => isElementNode(node) && matchElements(node, until)
 		) as Element | undefined;
 
 		if (matching) {
@@ -281,11 +284,11 @@ const undo = (
 			const selection = (win ?? window).getSelection();
 			if (selection) {
 				selection.removeAllRanges();
-				const newRange = document.createRange();
+				const newRange = (win ?? window).document.createRange();
 				if (isTextNode(startNode) && isTextNode(endNode)) {
 					newRange.setStart(startNode, startOffset);
 					newRange.setEnd(endNode, endOffset);
-				} else if (startNode instanceof Node && endNode instanceof Node) {
+				} else if (!!startNode && !!endNode) {
 					newRange.selectNodeContents(startNode);
 				}
 				selection.addRange(newRange);
@@ -298,7 +301,7 @@ const undo = (
 
 	const element = isSelectedAnElement(range);
 
-	if (element instanceof Element && matchElements(element, until)) {
+	if (isElementNode(element) && matchElements(element, until)) {
 		range.selectNode(element);
 	}
 
@@ -314,7 +317,7 @@ const undo = (
 				acc.append(node);
 				return acc;
 			},
-			new DocumentFragment()
+			(extractedDoc.ownerDocument ?? document).createDocumentFragment()
 		);
 
 		range.insertNode(extractedDoc);
@@ -387,8 +390,8 @@ const focusEditableElement = (win?: Window): void => {
 		editableEl = editableEl.parentElement;
 	}
 
-	if (editableEl instanceof HTMLElement) {
-		editableEl.focus();
+	if (isElementNode(editableEl)) {
+		(editableEl as HTMLElement).focus();
 	}
 };
 
@@ -398,12 +401,12 @@ const unwrapWith = (tagName: string, win?: Window): void => {
 
 	let element: Node | null = range.commonAncestorContainer;
 
-	while (element && !(element instanceof Element && element.tagName === tagName)) {
+	while (element && !(isElementNode(element) && element.tagName === tagName)) {
 		const isEditable =
-			element instanceof HTMLElement
-				? element.isContentEditable
-				: element.parentElement instanceof HTMLElement
-					? element.parentElement.isContentEditable
+			isElementNode(element)
+				? (element as HTMLElement).isContentEditable
+				: isElementNode(element.parentElement)
+					? (element.parentElement as HTMLElement).isContentEditable
 					: false;
 
 		if (!isEditable && !isTextNode(element)) {
@@ -414,7 +417,7 @@ const unwrapWith = (tagName: string, win?: Window): void => {
 		element = element.parentElement;
 	}
 
-	if (!element || !(element instanceof Element)) return;
+	if (!element || !isElementNode(element)) return;
 	unwrap(element);
 };
 
@@ -436,8 +439,8 @@ function findTextPositionAtOffset(
 			let parent: Node | null = node.parentNode;
 			while (parent && parent !== editor) {
 				if (
-					parent instanceof HTMLElement &&
-					parent.getAttribute('contenteditable') === 'false'
+					isElementNode(parent) &&
+					(parent as HTMLElement).getAttribute('contenteditable') === 'false'
 				) {
 					return NodeFilter.FILTER_REJECT;
 				}

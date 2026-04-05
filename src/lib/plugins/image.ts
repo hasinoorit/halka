@@ -1,4 +1,4 @@
-import { Node as NodeHelpers } from '../helpers/index.js';
+import { Node as NodeHelpers, isElementNode } from '../helpers/index.js';
 import { type Editor, definePlugin } from '../core/editor.js';
 
 type ImageCommandPayload = {
@@ -13,21 +13,21 @@ const getActiveImageElement = (editor: Editor): HTMLImageElement | null => {
 
 	let node: Node | null = range.commonAncestorContainer;
 
-	if (node instanceof HTMLElement || node instanceof DocumentFragment) {
+	if (isElementNode(node) || (node && node.nodeType === 11)) {
 		const start = Math.max(0, range.startOffset);
 		const end = Math.min(node.childNodes.length, Math.max(start, range.endOffset));
 
 		for (let i = start; i < end; i += 1) {
 			const child = node.childNodes[i];
-			if (child instanceof HTMLImageElement) {
-				return child;
+			if (isElementNode(child) && child.tagName === 'IMG') {
+				return child as HTMLImageElement;
 			}
 		}
 	}
 
 	while (node && node !== root) {
-		if (node instanceof HTMLImageElement) {
-			return node;
+		if (isElementNode(node) && node.tagName === 'IMG') {
+			return node as HTMLImageElement;
 		}
 		node = node.parentElement;
 	}

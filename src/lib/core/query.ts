@@ -1,5 +1,5 @@
 import type { Editor } from './editor.js';
-import { getParentElements } from '../helpers/node.js';
+import { getParentElements, isElementNode } from '../helpers/node.js';
 
 /**
  * Query API for reading editor state
@@ -38,7 +38,7 @@ export class Query {
 		const ancestors = getParentElements(range.commonAncestorContainer);
 
 		for (const ancestor of ancestors) {
-			if (ancestor instanceof Element && ancestor.tagName === targetTag) {
+			if (isElementNode(ancestor) && ancestor.tagName === targetTag) {
 				return ancestor;
 			}
 		}
@@ -88,7 +88,7 @@ export class Query {
 
 		for (const ancestor of ancestors) {
 			if (
-				ancestor instanceof Element &&
+				isElementNode(ancestor) &&
 				this.editor.schema.isBlock(ancestor.tagName) &&
 				ancestor !== this.editor.root
 			) {

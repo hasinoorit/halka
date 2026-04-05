@@ -1,4 +1,4 @@
-import { Range as RangeHelpers, Node as NodeHelpers } from '../helpers/index.js';
+import { Range as RangeHelpers, Node as NodeHelpers, isElementNode } from '../helpers/index.js';
 import { type Editor, definePlugin } from '../core/editor.js';
 
 type LinkCommandPayload = {
@@ -9,7 +9,7 @@ type LinkCommandPayload = {
 
 const getActiveLinkElement = (editor: Editor): HTMLAnchorElement | null => {
 	const el = editor.query.findClosest('A');
-	return el instanceof HTMLAnchorElement ? el : null;
+	return (isElementNode(el) && el.tagName === 'A') ? el as HTMLAnchorElement : null;
 };
 
 const toggleLinkForSelection = (editor: Editor, payload?: unknown): void => {

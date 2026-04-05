@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Range as RangeHelpers, Node as NodeHelpers } from '../helpers/index.js';
+import { Range as RangeHelpers, Node as NodeHelpers, isElementNode } from '../helpers/index.js';
 import { Schema } from './schema.js';
 import { Query } from './query.js';
 import { Transform } from './transform.js';
@@ -299,7 +298,7 @@ export class HalkaEditor extends Editor {
 			this.onShortcut('mod+u', () => this.toggleInlineFormat('underline'));
 		}
 
-		document.addEventListener('selectionchange', this.handleSelectionChangeBound);
+		this.window.document.addEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.addEventListener('blur', this.handleBlurBound);
 		this.root.addEventListener('focus', this.handleFocusBound);
 
@@ -413,7 +412,7 @@ export class HalkaEditor extends Editor {
 
 			const range = selection.getRangeAt(0);
 			range.deleteContents();
-			const textNode = document.createTextNode(text);
+			const textNode = this.window.document.createTextNode(text);
 			range.insertNode(textNode);
 
 			this.selection.setCursorAfter(textNode);
@@ -499,15 +498,15 @@ export class HalkaEditor extends Editor {
 			const selectedElement = RangeHelpers.isSelectedAnElement(range);
 			let span: HTMLElement | null = null;
 
-			if (selectedElement instanceof HTMLElement && selectedElement.tagName === 'SPAN') {
-				span = selectedElement;
+			if (isElementNode(selectedElement) && selectedElement.tagName === 'SPAN') {
+				span = selectedElement as HTMLElement;
 			} else {
 				const node = range.commonAncestorContainer;
 				const element =
-					node instanceof HTMLElement
-						? node
-						: node.parentElement instanceof HTMLElement
-							? node.parentElement
+					isElementNode(node)
+						? node as HTMLElement
+						: isElementNode(node.parentElement)
+							? node.parentElement as HTMLElement
 							: null;
 				span = element ? element.closest('span') : null;
 			}
@@ -539,10 +538,12 @@ export class HalkaEditor extends Editor {
 		this.runTransaction(() => {
 			this.selection.preserveSelection(() => {
 			const range = this.getRange();
-			let element =
-				range.commonAncestorContainer instanceof HTMLElement
-					? range.commonAncestorContainer
-					: range.commonAncestorContainer.parentElement;
+			let element: HTMLElement | null =
+				isElementNode(range.commonAncestorContainer)
+					? range.commonAncestorContainer as HTMLElement
+					: isElementNode(range.commonAncestorContainer.parentElement)
+						? range.commonAncestorContainer.parentElement as HTMLElement
+						: null;
 
 			while (element && element !== this.root && getComputedStyle(element).display === 'inline') {
 				element = element.parentElement;
@@ -715,7 +716,7 @@ export class HalkaEditor extends Editor {
 			this.root.removeEventListener('keydown', this.handleKeydownBound);
 		}
 
-		document.removeEventListener('selectionchange', this.handleSelectionChangeBound);
+		this.window.document.removeEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.removeEventListener('blur', this.handleBlurBound);
 		// Use stored bound reference — anonymous arrow in old code was never removable
 		this.root.removeEventListener('focus', this.handleFocusBound);
@@ -816,7 +817,7 @@ export class HalkaEditor extends Editor {
 		// Count only editable text: skip contenteditable=false subtrees so that
 		// save and restore offsets are symmetric with findTextPositionAtOffset.
 		const countEditableText = (node: Node): number => {
-			if (node instanceof HTMLElement && node.getAttribute('contenteditable') === 'false') {
+			if (isElementNode(node) && (node as HTMLElement).getAttribute('contenteditable') === 'false') {
 				return 0;
 			}
 			if (node.nodeType === Node.TEXT_NODE) {
@@ -942,7 +943,7 @@ export class HalkaEditor extends Editor {
 	}
 
 	private createCollapsedRangeAtEnd(): Range {
-		const range = document.createRange();
+		const range = this.window.document.createRange();
 		range.selectNodeContents(this.root);
 		range.collapse(false);
 		return range;
