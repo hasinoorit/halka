@@ -11,6 +11,7 @@ export type HalkaPlugin = (editor: Editor) => () => void;
 export type HalkaDeclarativePlugin = {
 	name: string;
 	commands?: Record<string, (editor: Editor, payload?: unknown) => void>;
+	states?: Record<string, (editor: Editor, payload?: unknown) => unknown>;
 	shortcuts?: Record<string, string | ((editor: Editor, event: KeyboardEvent) => void)>;
 	events?: Record<string, (editor: Editor, event: Event) => void>;
 };
@@ -24,6 +25,14 @@ export function definePlugin(config: HalkaDeclarativePlugin): HalkaPlugin {
 				const wrapped = (payload?: unknown) => handler(editor, payload);
 				editor.registerCommand(name as any, wrapped as any);
 				cleanupFns.push(() => editor.unregisterCommand(name as any, wrapped as any));
+			}
+		}
+
+		if (config.states) {
+			for (const [name, handler] of Object.entries(config.states)) {
+				const wrapped = (payload?: unknown) => handler(editor, payload);
+				editor.registerState(name as any, wrapped as any);
+				cleanupFns.push(() => editor.unregisterState(name as any, wrapped as any));
 			}
 		}
 

@@ -22,26 +22,43 @@ const toggleLinkForSelection = (editor: Editor, payload?: unknown): void => {
 		const selection = editor.getSelection();
 		if (!selection) return;
 
+		const data = (payload ?? {}) as LinkCommandPayload;
+		const href = typeof data.href === 'string' ? data.href.trim() : undefined;
+
 		const existingLink = getActiveLinkElement(editor);
 
 		if (existingLink) {
-			editor.selection.preserveSelection(() => {
-				RangeHelpers.unwrapWith('A', editor.window);
-			});
+			if (href === '') {
+				editor.selection.preserveSelection(() => {
+					RangeHelpers.unwrapWith('A', editor.window);
+				});
+				return;
+			}
+			
+			if (href) existingLink.href = href;
+			if (typeof data.target === 'string') {
+				if (data.target) existingLink.target = data.target;
+				else existingLink.removeAttribute('target');
+			}
+			if (typeof data.rel === 'string') {
+				if (data.rel) existingLink.rel = data.rel;
+				else existingLink.removeAttribute('rel');
+			}
 			return;
 		}
+
+		// Don't create empty links
+		if (!href) return;
 
 		// Even if collapsed, RangeHelpers.surround will handle it by inserting a zero-width space
 		// if the user wants to insert a link at the cursor and type.
 
 		const a = editor.createEl('a');
 
-		const data = (payload ?? {}) as LinkCommandPayload;
-		const href = typeof data.href === 'string' && data.href.trim() ? data.href.trim() : undefined;
 		const target = typeof data.target === 'string' ? data.target : undefined;
 		const rel = typeof data.rel === 'string' ? data.rel : undefined;
 
-		a.href = href ?? '#';
+		a.href = href;
 
 		if (target !== undefined) {
 			a.target = target;
@@ -71,9 +88,17 @@ const updateLinkAtSelection = (editor: Editor, payload?: unknown): void => {
 		}
 
 		const data = (payload ?? {}) as LinkCommandPayload;
+		const href = typeof data.href === 'string' ? data.href.trim() : undefined;
 
-		if (typeof data.href === 'string' && data.href.trim()) {
-			link.setAttribute('href', data.href.trim());
+		if (href === '') {
+			editor.selection.preserveSelection(() => {
+				RangeHelpers.unwrapWith('A', editor.window);
+			});
+			return;
+		}
+
+		if (href) {
+			link.setAttribute('href', href);
 		}
 
 		if (data.target !== undefined) {
@@ -124,6 +149,17 @@ export const linkPlugin = definePlugin({
 		},
 		'link.unlink': (editor) => {
 			unlinkAtSelection(editor);
+		}
+	},
+	states: {
+		'link.active': (editor) => {
+			const link = getActiveLinkElement(editor);
+			if (!link) return null;
+			return {
+				href: link.getAttribute('href') || '',
+				target: link.getAttribute('target') || '',
+				rel: link.getAttribute('rel') || ''
+			};
 		}
 	}
 });

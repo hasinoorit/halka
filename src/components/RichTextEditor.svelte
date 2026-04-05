@@ -153,10 +153,12 @@
 	function insertLink() {
 		if (!editor) return;
 		if (link) {
-			editor.execCommand('link.unlink');
+			const activeLink = editor.getState('link.active') as { href?: string } | null;
+			linkUrl = activeLink?.href || '';
 		} else {
-			showLinkModal = true;
+			linkUrl = '';
 		}
+		showLinkModal = true;
 	}
 
 	function insertImage() {
@@ -170,7 +172,7 @@
 	}
 
 	function handleLinkSubmit() {
-		if (linkUrl && editor) {
+		if (editor) {
 			editor.execCommand('link.toggle', { href: linkUrl });
 			linkUrl = '';
 			showLinkModal = false;

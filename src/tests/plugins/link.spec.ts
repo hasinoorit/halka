@@ -42,7 +42,7 @@ describe('linkPlugin', () => {
 		newRange.setEnd(newText, newText.textContent?.length ?? 0);
 		editor.setSelection(newRange);
 
-		editor.execCommand('link.toggle');
+		editor.execCommand('link.unlink');
 
 		a = root.querySelector('a');
 		expect(a).toBeNull();

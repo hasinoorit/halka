@@ -78,15 +78,13 @@ export class Transform {
 				// Explicit DOM-active check for current caret context
 				const domActive = this.editor.query.findClosest(tagName) !== null;
 
-				// If caret is inside active DOM mark, break out so next typed char is unformatted
 				if (domActive) {
-					RangeHelpers.undo(tagName, this.editor.window);
 					if (pending.has(tagUpper)) {
 						this.editor.removePendingFormat(tagName);
 					}
 					
 					const offsets = this.editor.getSelectionOffsets();
-					RangeHelpers.undo(tagName, this.editor.window);
+					RangeHelpers.unwrapWith(tagName, this.editor.window);
 					if (offsets && this.editor.window.getSelection()) {
 						RangeHelpers.restoreSelectionByOffsets(
 							this.editor.window.getSelection()!,
@@ -95,7 +93,6 @@ export class Transform {
 							offsets.end
 						);
 					}
-					this.editor.selection.collapseToEnd();
 					return;
 				}
 
