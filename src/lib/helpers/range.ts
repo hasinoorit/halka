@@ -140,8 +140,8 @@ const getRange = (win?: Window): Range | undefined => {
 	return selection.getRangeAt(0);
 };
 
-const surround = (elementDOM: HTMLElement, win?: Window): void => {
-	const range = getRange(win);
+const surround = (elementDOM: HTMLElement, win?: Window, providedRange?: Range): void => {
+	const range = providedRange || getRange(win);
 	if (!range) return;
 
 	if (range.collapsed) {
@@ -150,16 +150,15 @@ const surround = (elementDOM: HTMLElement, win?: Window): void => {
 		range.selectNode(textNode);
 	}
 
-	wrapSelectionWith(elementDOM, win);
+	wrapSelectionWith(elementDOM, win, range);
 
 	range.selectNodeContents(elementDOM);
 
 	focusEditableElement(win);
 };
 
-const wrapSelectionWith = (elementDOM: HTMLElement, win?: Window): void => {
-	elementDOM.ownerDocument.defaultView
-	const range = getRange(win);
+const wrapSelectionWith = (elementDOM: HTMLElement, win?: Window, providedRange?: Range): void => {
+	const range = providedRange || getRange(win);
 	if (!range) return;
 	const content = range.extractContents();
 	copyPasteChildNodes(elementDOM, content);

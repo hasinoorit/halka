@@ -266,11 +266,6 @@ export class HalkaEditor extends Editor {
 	private savedSelectionOffsets: { start: number; end: number } | undefined;
 	private activeFormats: Record<string, boolean> = {};
 	private activeStyles: Record<string, string> = {};
-	/**
-	 * Set by setSelection() inside a runTransaction callback to prevent
-	 * the transaction epilogue from overwriting the explicitly-set cursor.
-	 */
-	private _transactionSetSelection = false;
 
 	constructor(root: HTMLElement, options: HalkaOptions = {}) {
 		super(root);
@@ -392,11 +387,13 @@ export class HalkaEditor extends Editor {
 			const range = selection.getRangeAt(0);
 			range.deleteContents();
 			const fragment = range.createContextualFragment(html);
+			
+			// We need to find the last inserted node to set cursor after it
+			const lastNode = fragment.lastChild;
+			if (!lastNode) return;
+			
 			range.insertNode(fragment);
-
-			range.collapse(false);
-			selection.removeAllRanges();
-			selection.addRange(range);
+			this.selection.setCursorAfter(lastNode);
 		});
 	}
 
@@ -410,10 +407,7 @@ export class HalkaEditor extends Editor {
 			const textNode = document.createTextNode(text);
 			range.insertNode(textNode);
 
-			range.setStartAfter(textNode);
-			range.setEndAfter(textNode);
-			selection.removeAllRanges();
-			selection.addRange(range);
+			this.selection.setCursorAfter(textNode);
 		});
 	}
 
@@ -426,6 +420,15 @@ export class HalkaEditor extends Editor {
 				return range;
 			}
 		}
+
+		if (this.savedSelectionRange && this.root.contains(this.savedSelectionRange.commonAncestorContainer)) {
+			try {
+				const cloned = this.savedSelectionRange.cloneRange();
+				cloned.startContainer;
+				return cloned;
+			} catch (e) {}
+		}
+
 		// Fall back to restoring saved selection if the live one is outside root
 		if (this.savedSelectionOffsets) {
 			const sel = this.window.getSelection();
@@ -465,8 +468,11 @@ export class HalkaEditor extends Editor {
 		selection.removeAllRanges();
 		selection.addRange(range);
 		this.selection.normalize();
-		// Signal to runTransaction epilogue: do NOT override this with applySelection()
-		this._transactionSetSelection = true;
+
+		// Update internal saved state as well so that subsequent restorations
+		// use the new position.
+		this.savedSelectionRange = range.cloneRange();
+		this.savedSelectionOffsets = this.computeSelectionOffsets(range);
 	}
 
 	getSelectionOffsets(): { start: number; end: number } | undefined {
@@ -609,6 +615,18 @@ export class HalkaEditor extends Editor {
 			this.selection.normalize();
 			return;
 		}
+
+		if (this.savedSelectionRange && this.root.contains(this.savedSelectionRange.commonAncestorContainer)) {
+			try {
+				const cloned = this.savedSelectionRange.cloneRange();
+				selection?.removeAllRanges();
+				selection?.addRange(cloned);
+				this.selection.normalize();
+				return;
+			} catch (e) {
+				// Fall through to text offsets if applying native range fails
+			}
+		}
 		if (this.savedSelectionOffsets) {
 			RangeHelpers.restoreSelectionByOffsets(
 				this.window.getSelection()!,
@@ -624,21 +642,18 @@ export class HalkaEditor extends Editor {
 
 	runTransaction(cb: (editor: Editor) => void): void {
 		const beforeHTML = this.getHTML();
+		
+		const currentSelection = this.window.getSelection();
+		const hasActiveSelection = currentSelection && 
+			currentSelection.rangeCount > 0 && 
+			this.root.contains(currentSelection.getRangeAt(0).commonAncestorContainer);
 
-		// Save selection BEFORE focus() so we capture the last known user caret
-		this.saveSelection();
 		this.root.focus();
-
-		// Force restore selection BEFORE running the callback to guarantee that
-		// if the callback calls getRange() it gets the correct coordinates, skipping
-		// over any DOM mutation that might have reset the native selection to 0.
-		this.applySelection(true);
-
-		// Reset the "explicit cursor set" flag before the callback runs.
-		// If the callback calls setSelection(), this will be set to true and we
-		// will NOT call applySelection() in the epilogue (which would overwrite it).
-		this._transactionSetSelection = false;
-
+		
+		if (!hasActiveSelection && (this.savedSelectionRange || this.savedSelectionOffsets)) {
+			this.applySelection(true);
+		}
+		
 		cb(this);
 
 		let merged = false;
@@ -680,21 +695,9 @@ export class HalkaEditor extends Editor {
 		}
 
 		const afterHTML = this.getHTML();
-		if (afterHTML !== beforeHTML || merged) {
-			// Only restore saved selection if the callback did NOT set its own.
-			// If setSelection() was called inside cb(), _transactionSetSelection is true
-			// and we must NOT overwrite the cursor the operation explicitly placed.
-			if (!this._transactionSetSelection) {
-				// forceRestore=true ensures we ignore the native browser selection
-				// which may have been reset to index 0 by the DOM mutations taking place.
-				this.applySelection(true);
-			}
-			if (afterHTML !== beforeHTML) {
-				this.normalizeHTML();
-				this.emit('change', this.getHTML());
-			}
-		} else {
-			this.normalizeSelection();
+		if (afterHTML !== beforeHTML) {
+			this.normalizeHTML();
+			this.emit('change', this.getHTML());
 		}
 	}
 

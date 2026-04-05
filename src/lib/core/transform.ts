@@ -13,8 +13,10 @@ export class Transform {
 	 */
 	wrap(tagName: string): this {
 		this.editor.runTransaction(() => {
-			const element = this.editor.createEl(tagName);
-			RangeHelpers.surround(element, this.editor.window);
+			this.editor.selection.preserveSelection(() => {
+				const element = this.editor.createEl(tagName);
+				RangeHelpers.surround(element, this.editor.window);
+			});
 		});
 		return this;
 	}
@@ -24,7 +26,16 @@ export class Transform {
 	 */
 	unwrap(tagName: string): this {
 		this.editor.runTransaction(() => {
+			const offsets = this.editor.getSelectionOffsets();
 			RangeHelpers.undo(tagName, this.editor.window);
+			if (offsets && this.editor.window.getSelection()) {
+				RangeHelpers.restoreSelectionByOffsets(
+					this.editor.window.getSelection()!,
+					this.editor.root,
+					offsets.start,
+					offsets.end
+				);
+			}
 		});
 		return this;
 	}
@@ -50,9 +61,7 @@ export class Transform {
 			}
 
 			range.insertNode(node);
-			range.setStartAfter(node);
-			range.setEndAfter(node);
-			this.editor.applySelection();
+			this.editor.selection.setCursorAfter(node);
 		});
 		return this;
 	}
@@ -75,15 +84,18 @@ export class Transform {
 					if (pending.has(tagUpper)) {
 						this.editor.removePendingFormat(tagName);
 					}
-					{
-						const range = this.editor.getRange();
-						range.collapse(false);
+					
+					const offsets = this.editor.getSelectionOffsets();
+					RangeHelpers.undo(tagName, this.editor.window);
+					if (offsets && this.editor.window.getSelection()) {
+						RangeHelpers.restoreSelectionByOffsets(
+							this.editor.window.getSelection()!,
+							this.editor.root,
+							offsets.start,
+							offsets.end
+						);
 					}
-					this.editor.applySelection();
-					this.editor.window.setTimeout(() => {
-						this.editor.root.focus();
-						this.editor.applySelection();
-					}, 0);
+					this.editor.selection.collapseToEnd();
 					return;
 				}
 
@@ -93,24 +105,29 @@ export class Transform {
 				} else {
 					this.editor.addPendingFormat(tagName);
 				}
-				{
-					const range = this.editor.getRange();
-					range.collapse(false);
-				}
-				this.editor.applySelection();
-				this.editor.window.setTimeout(() => {
-					this.editor.root.focus();
-					this.editor.applySelection();
-				}, 0);
+				
+				const range = this.editor.getRange();
+				this.editor.selection.setCursorAt(range.startContainer, range.startOffset);
 				return;
 			}
 
 			const isActive = this.editor.query.isActive(tagName);
+			const offsets = this.editor.getSelectionOffsets();
+
 			if (isActive) {
 				RangeHelpers.undo(tagName, this.editor.window);
 			} else {
 				const element = this.editor.createEl(tagName);
 				RangeHelpers.surround(element, this.editor.window);
+			}
+
+			if (offsets && this.editor.window.getSelection()) {
+				RangeHelpers.restoreSelectionByOffsets(
+					this.editor.window.getSelection()!,
+					this.editor.root,
+					offsets.start,
+					offsets.end
+				);
 			}
 		});
 		return this;
@@ -120,11 +137,7 @@ export class Transform {
 	 * Collapse selection to its end point
 	 */
 	collapseToEnd(): this {
-		this.editor.runTransaction(() => {
-			const range = this.editor.getRange();
-			range.collapse(false);
-			this.editor.applySelection();
-		});
+		this.editor.selection.collapseToEnd();
 		return this;
 	}
 
@@ -132,11 +145,7 @@ export class Transform {
 	 * Collapse selection to its start point
 	 */
 	collapseToStart(): this {
-		this.editor.runTransaction(() => {
-			const range = this.editor.getRange();
-			range.collapse(true);
-			this.editor.applySelection();
-		});
+		this.editor.selection.collapseToStart();
 		return this;
 	}
 
@@ -146,8 +155,10 @@ export class Transform {
 	deleteSelection(): this {
 		this.editor.runTransaction(() => {
 			const range = this.editor.getRange();
+			const startNode = range.startContainer;
+			const startOffset = range.startOffset;
 			range.deleteContents();
-			this.editor.applySelection();
+			this.editor.selection.setCursorAt(startNode, startOffset);
 		});
 		return this;
 	}
@@ -160,9 +171,7 @@ export class Transform {
 			const range = this.editor.getRange();
 			range.deleteContents();
 			range.insertNode(node);
-			range.setStartAfter(node);
-			range.setEndAfter(node);
-			this.editor.applySelection();
+			this.editor.selection.setCursorAfter(node);
 		});
 		return this;
 	}

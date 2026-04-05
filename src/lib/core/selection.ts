@@ -33,16 +33,12 @@ export class HalkaSelection {
 	 * Collapse selection to the start of the given node
 	 */
 	collapseToStart(node?: Node): this {
-		this.editor.runTransaction(() => {
-			const range = this.range;
-			if (node) {
-				range.selectNodeContents(node);
-				range.collapse(true);
-			} else {
-				range.collapse(true);
-			}
-			this.editor.applySelection();
-		});
+		const range = this.range;
+		if (node) {
+			range.selectNodeContents(node);
+		}
+		range.collapse(true);
+		this.editor.setSelection(range);
 		return this;
 	}
 
@@ -50,16 +46,12 @@ export class HalkaSelection {
 	 * Collapse selection to the end of the given node
 	 */
 	collapseToEnd(node?: Node): this {
-		this.editor.runTransaction(() => {
-			const range = this.range;
-			if (node) {
-				range.selectNodeContents(node);
-				range.collapse(false);
-			} else {
-				range.collapse(false);
-			}
-			this.editor.applySelection();
-		});
+		const range = this.range;
+		if (node) {
+			range.selectNodeContents(node);
+		}
+		range.collapse(false);
+		this.editor.setSelection(range);
 		return this;
 	}
 
@@ -67,11 +59,64 @@ export class HalkaSelection {
 	 * Select the entire contents of a node
 	 */
 	selectAll(node: Node): this {
-		this.editor.runTransaction(() => {
-			const range = this.range;
-			range.selectNodeContents(node);
-			this.editor.applySelection();
-		});
+		const range = this.editor.window.document.createRange();
+		range.selectNodeContents(node);
+		this.editor.setSelection(range);
+		return this;
+	}
+
+	/**
+	 * Set cursor explicitly after a node
+	 */
+	setCursorAfter(node: Node): this {
+		const range = this.editor.window.document.createRange();
+		range.setStartAfter(node);
+		range.collapse(true);
+		this.editor.setSelection(range);
+		return this;
+	}
+
+	/**
+	 * Set cursor explicitly before a node
+	 */
+	setCursorBefore(node: Node): this {
+		const range = this.editor.window.document.createRange();
+		range.setStartBefore(node);
+		range.collapse(true);
+		this.editor.setSelection(range);
+		return this;
+	}
+
+	/**
+	 * Set cursor at the end of a node's contents
+	 */
+	setCursorAtEnd(node: Node): this {
+		const range = this.editor.window.document.createRange();
+		range.selectNodeContents(node);
+		range.collapse(false);
+		this.editor.setSelection(range);
+		return this;
+	}
+
+	/**
+	 * Set cursor at the start of a node's contents
+	 */
+	setCursorAtStart(node: Node): this {
+		const range = this.editor.window.document.createRange();
+		range.selectNodeContents(node);
+		range.collapse(true);
+		this.editor.setSelection(range);
+		return this;
+	}
+
+	/**
+	 * Set cursor at a specific text offset
+	 */
+	setCursorAt(node: Node, offset: number): this {
+		const range = this.editor.window.document.createRange();
+		range.setStart(node, offset);
+		range.collapse(true);
+		this.editor.setSelection(range);
 		return this;
 	}
 

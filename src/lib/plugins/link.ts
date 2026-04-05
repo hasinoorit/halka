@@ -25,13 +25,14 @@ const toggleLinkForSelection = (editor: Editor, payload?: unknown): void => {
 		const existingLink = getActiveLinkElement(editor);
 
 		if (existingLink) {
-			RangeHelpers.unwrapWith('A', editor.window);
+			editor.selection.preserveSelection(() => {
+				RangeHelpers.unwrapWith('A', editor.window);
+			});
 			return;
 		}
 
-		if (range.collapsed) {
-			return;
-		}
+		// Even if collapsed, RangeHelpers.surround will handle it by inserting a zero-width space
+		// if the user wants to insert a link at the cursor and type.
 
 		const a = editor.createEl('a');
 
@@ -50,12 +51,9 @@ const toggleLinkForSelection = (editor: Editor, payload?: unknown): void => {
 			a.rel = rel;
 		}
 
-		RangeHelpers.surround(a, editor.window);
-
-		const newRange = editor.window.document.createRange();
-		newRange.selectNodeContents(a);
-		selection.removeAllRanges();
-		selection.addRange(newRange);
+		editor.selection.preserveSelection(() => {
+			RangeHelpers.surround(a, editor.window, editor.getRange());
+		});
 	});
 };
 
@@ -109,7 +107,9 @@ const unlinkAtSelection = (editor: Editor): void => {
 			return;
 		}
 
-		RangeHelpers.unwrapWith('A', editor.window);
+		editor.selection.preserveSelection(() => {
+			RangeHelpers.unwrapWith('A', editor.window);
+		});
 	});
 };
 

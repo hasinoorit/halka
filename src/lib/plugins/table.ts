@@ -265,9 +265,7 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 		target.rowSpan = maxRow - minRow + 1;
 		target.colSpan = maxCol - minCol + 1;
 
-		const newRange = editor.window.document.createRange();
-		newRange.selectNodeContents(target);
-		editor.setSelection(newRange);
+		editor.selection.selectAll(target);
 
 		return true;
 	};
@@ -551,15 +549,8 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 				const newCell = editor.createEl(row.cells[0]?.tagName === 'TH' ? 'th' : 'td');
 				ref ? row.insertBefore(newCell, ref) : row.appendChild(newCell);
 			});
+			editor.selection.setCursorAtEnd(cell);
 		});
-		const range = editor.window.document.createRange();
-		range.selectNodeContents(cell);
-		range.collapse(false);
-		const selection = editor.getSelection();
-		if (selection) {
-			selection.removeAllRanges();
-			selection.addRange(range);
-		}
 	};
 
 	const addRow: CommandHandler<'table.addRow'> = (after) => {
@@ -593,15 +584,8 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 			}
 			const ref = Array.from(table.rows)[insAt];
 			ref ? ref.parentElement?.insertBefore(newRow, ref) : (row.parentElement || table.tBodies[0] || table).appendChild(newRow);
+			editor.selection.setCursorAtEnd(cell);
 		});
-		const range = editor.window.document.createRange();
-		range.selectNodeContents(cell);
-		range.collapse(false);
-		const selection = editor.getSelection();
-		if (selection) {
-			selection.removeAllRanges();
-			selection.addRange(range);
-		}
 	};
 
 	const commands = {

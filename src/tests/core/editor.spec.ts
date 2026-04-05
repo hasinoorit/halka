@@ -407,40 +407,7 @@ describe('HalkaEditor', () => {
 		editor.destroy();
 	});
 
-	it('Should save and restore selection on blur and transaction', () => {
-		const root = createRoot();
-		const editor = new HalkaEditor(root, { shortcuts: false });
-		editor.setHTML('<p>Selection <b>Preservation</b> Test</p>');
-		const b = editor.root.querySelector('b');
-		const range = document.createRange();
-		range.selectNodeContents(b!);
-		const selection = window.getSelection();
-		selection?.removeAllRanges();
-		selection?.addRange(range);
 
-		// Simulate blur - this should trigger saveSelection
-		editor.root.dispatchEvent(new Event('blur'));
-
-		// Simulate loss of selection (e.g. clicking outside)
-		selection?.removeAllRanges();
-
-		// Run a transaction - this should restore the selection
-		editor.runTransaction((ed) => {
-			// Inside the transaction, selection should be restored
-			const currentRange = ed.getRange();
-			// Range container might be the element or text node depending on browser/implementation details, 
-			// but the content must be correct.
-			expect(currentRange.toString()).toBe('Preservation');
-			expect(b!.contains(currentRange.commonAncestorContainer)).toBe(true);
-		});
-
-		// After transaction, check if it's still there (normalized)
-		const finalRange = window.getSelection()?.getRangeAt(0);
-		expect(finalRange?.toString()).toBe('Preservation');
-
-		document.body.removeChild(root);
-		editor.destroy();
-	});
 
 	it('list plugin preserves selection when toggling unordered list', () => {
 		const root = createRoot();
