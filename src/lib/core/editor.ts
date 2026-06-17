@@ -186,7 +186,9 @@ export abstract class Editor {
 		return false;
 	}
 
-	ensureDocumentStructure(): void {}
+	ensureDocumentStructure(options?: { emit?: boolean }): void {}
+
+	reportContentChangeIfNeeded(): void {}
 
 	abstract getHTML(): string;
 	abstract setHTML(html: string): void;
@@ -281,6 +283,7 @@ export class HalkaEditor extends Editor {
 	private savedSelectionOffsets: { start: number; end: number } | undefined;
 	private activeFormats: Record<string, boolean> = {};
 	private activeStyles: Record<string, string> = {};
+	private lastReportedHTML = '';
 
 	constructor(root: HTMLElement, options: HalkaOptions = {}) {
 		super(root);
@@ -312,7 +315,8 @@ export class HalkaEditor extends Editor {
 
 		this.pluginCleanups = (this.options.plugins ?? []).map((plugin) => plugin(this));
 		this.registerDefaultNormalizers();
-		this.ensureDocumentStructure();
+		this.ensureDocumentStructure({ emit: false });
+		this.lastReportedHTML = this.getHTML();
 	}
 
 	get inline(): boolean {
@@ -374,7 +378,7 @@ export class HalkaEditor extends Editor {
 			currentNode = currentNode.parentNode;
 		}
 
-		this.emit('change', this.getHTML());
+		this.emit('formatChange');
 	}
 
 	hasFormat(format: string): boolean {
@@ -642,8 +646,10 @@ export class HalkaEditor extends Editor {
 		this.normalizeBlockHTML();
 	}
 
-	ensureDocumentStructure(): void {
-		if (!this.needsDocumentNormalization()) return;
+	ensureDocumentStructure(options: { emit?: boolean } = {}): void {
+		const shouldEmit = options.emit !== false;
+		const needsNorm = this.needsDocumentNormalization();
+		if (!needsNorm) return;
 
 		const selection = this.window.getSelection();
 		const offsets =
@@ -671,9 +677,16 @@ export class HalkaEditor extends Editor {
 		this.saveSelection();
 
 		const after = this.getHTML();
-		if (before !== after) {
-			this.emit('change', after);
+		if (shouldEmit && before !== after) {
+			this.reportContentChangeIfNeeded();
 		}
+	}
+
+	reportContentChangeIfNeeded(): void {
+		const html = this.getHTML();
+		if (html === this.lastReportedHTML) return;
+		this.lastReportedHTML = html;
+		this.emit('change', html);
 	}
 
 	private needsDocumentNormalization(): boolean {
@@ -821,7 +834,7 @@ export class HalkaEditor extends Editor {
 				}
 			}
 			this.saveSelection();
-			this.emit('change', this.getHTML());
+			this.reportContentChangeIfNeeded();
 		}
 	}
 

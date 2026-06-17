@@ -128,12 +128,12 @@
 			});
 			editor.setHTML(content);
 			editor.on('change', (html: string) => {
-				refresh();
 				onChange?.(html ?? '');
 				if (content !== html) {
 					content = html;
 				}
 			});
+			editor.on('formatChange', refresh);
 			refresh();
 		}
 	});

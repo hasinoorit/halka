@@ -17,6 +17,7 @@ export class InputManager {
 
 	private handleInput() {
 		this.editor.ensureDocumentStructure();
+		this.editor.reportContentChangeIfNeeded();
 	}
 
 	private handleBeforeInput(event: InputEvent) {

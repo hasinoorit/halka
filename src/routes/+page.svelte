@@ -2,32 +2,7 @@
 	import RichTextEditor from '../rich-text-editor/RichTextEditor.svelte';
 	import Button from '../components/ui/button.svelte';
 
-	let editorContent = $state(`
-		<h2>Welcome to HalkaEditor</h2>
-		<p>
-			This is a <strong>modern</strong> rich text editor built with Svelte and TypeScript. It's
-			lightweight, extensible, and designed for modern web applications.
-		</p>
-
-		<h3>Features</h3>
-		<ul>
-			<li>Rich text formatting (Bold, Italic, Underline)</li>
-			<li>Headings and Blockquotes</li>
-			<li>
-				Lists (Ordered and Unordered)
-				<ul>
-					<li>Nested lists support (use Tab/Shift+Tab)</li>
-				</ul>
-			</li>
-			<li>Links and Images</li>
-			<li>Tables with advanced controls</li>
-			<li>Custom text and background colors</li>
-		</ul>
-
-		<blockquote>"Simplicity is the ultimate sophistication." - Leonardo da Vinci</blockquote>
-
-		<p>Try editing this content to see the editor in action!</p>
-	`);
+	let editorContent = $state(`Hello World`);
 </script>
 <svelte:head>
 	<title>Halka Editor</title>
