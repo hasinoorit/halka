@@ -517,8 +517,20 @@ export class HalkaEditor extends Editor {
 	}
 
 	setInlineStyle(style: string, value?: string): void {
+		const isColorStyle = style === 'color' || style === 'background-color';
+
 		this.runTransaction(() => {
 			const range = this.getRange();
+
+			if (isColorStyle && value === undefined) {
+				this.clearNearestStyleProperty(style, range);
+				return;
+			}
+
+			if (isColorStyle && range.collapsed && !this.inline) {
+				this.setBlockStyle(style, value);
+				return;
+			}
 
 			const selectedElement = RangeHelpers.isSelectedAnElement(range);
 			let span: HTMLElement | null = null;
@@ -555,7 +567,35 @@ export class HalkaEditor extends Editor {
 
 			const element = this.createEl('span');
 			element.style.setProperty(style, value);
-				RangeHelpers.surround(element, this.window);
+			RangeHelpers.surround(element, this.window);
+		});
+	}
+
+	private clearNearestStyleProperty(style: string, range: Range): void {
+		this.selection.preserveSelection(() => {
+			let node: Node | null = range.startContainer;
+
+			if (node.nodeType === Node.TEXT_NODE) {
+				node = node.parentElement;
+			}
+
+			let element = isElementNode(node) ? (node as HTMLElement) : null;
+
+			while (element && element !== this.root) {
+				if (element.style.getPropertyValue(style)) {
+					element.style.removeProperty(style);
+					const remainingStyle = element.getAttribute('style');
+
+					if (
+						element.tagName === 'SPAN' &&
+						(!remainingStyle || remainingStyle.trim() === '')
+					) {
+						NodeHelpers.unwrap(element);
+					}
+					return;
+				}
+				element = element.parentElement;
+			}
 		});
 	}
 

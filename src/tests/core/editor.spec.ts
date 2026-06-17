@@ -204,6 +204,71 @@ describe('HalkaEditor', () => {
 		editor.destroy();
 	});
 
+	it('applies color to block when caret is collapsed', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p>hello</p>');
+		const text = getParagraphText(root);
+
+		const range = document.createRange();
+		range.setStart(text, 2);
+		range.setEnd(text, 2);
+		editor.setSelection(range);
+
+		editor.setInlineStyle('background-color', 'yellow');
+
+		const paragraph = root.querySelector('p') as HTMLParagraphElement;
+		expect(paragraph.style.getPropertyValue('background-color')).toBe('yellow');
+		expect(root.querySelector('span')).toBeNull();
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('clears color from nearest styled ancestor when value is omitted', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p style="color: red">hello</p>');
+		const text = getParagraphText(root);
+
+		const range = document.createRange();
+		range.setStart(text, 2);
+		range.setEnd(text, 2);
+		editor.setSelection(range);
+
+		editor.setInlineStyle('color');
+
+		const paragraph = root.querySelector('p') as HTMLParagraphElement;
+		expect(paragraph.style.getPropertyValue('color')).toBe('');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('clears color from nested span before block', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p style="color: red"><span style="color: blue">hello</span></p>');
+		const text = root.querySelector('span')!.firstChild as Text;
+
+		const range = document.createRange();
+		range.setStart(text, 2);
+		range.setEnd(text, 2);
+		editor.setSelection(range);
+
+		editor.setInlineStyle('color');
+
+		expect(root.querySelector('span')).toBeNull();
+		expect(root.querySelector('p')!.style.getPropertyValue('color')).toBe('red');
+		expect(root.textContent).toBe('hello');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
 	it('applies block format as direct child and preserves styles', () => {
 		const root = createRoot();
 		const editor = new HalkaEditor(root, { shortcuts: false });

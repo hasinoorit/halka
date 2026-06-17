@@ -99,4 +99,100 @@ describe('markdownShortcutsPlugin', () => {
         document.body.removeChild(root);
         editor.destroy();
     });
+
+    it('converts **text** to bold', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [markdownShortcutsPlugin] });
+
+        editor.setHTML('<p>**bold**</p>');
+        const p = root.querySelector('p')!;
+        const text = p.firstChild as Text;
+
+        const range = document.createRange();
+        range.setStart(text, 8);
+        range.setEnd(text, 8);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        const strong = root.querySelector('strong');
+        expect(strong).not.toBeNull();
+        expect(strong?.textContent).toBe('bold');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
+
+    it('converts *text* to italic', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [markdownShortcutsPlugin] });
+
+        editor.setHTML('<p>hello *italic*</p>');
+        const p = root.querySelector('p')!;
+        const text = p.firstChild as Text;
+
+        const range = document.createRange();
+        range.setStart(text, 14);
+        range.setEnd(text, 14);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        const em = root.querySelector('em');
+        expect(em).not.toBeNull();
+        expect(em?.textContent).toBe('italic');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
+
+    it('converts `code` to inline code', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [markdownShortcutsPlugin] });
+
+        editor.setHTML('<p>`code`</p>');
+        const p = root.querySelector('p')!;
+        const text = p.firstChild as Text;
+
+        const range = document.createRange();
+        range.setStart(text, 6);
+        range.setEnd(text, 6);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        const code = root.querySelector('code');
+        expect(code).not.toBeNull();
+        expect(code?.textContent).toBe('code');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
+
+    it('converts ~~text~~ to strikethrough', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [markdownShortcutsPlugin] });
+
+        editor.setHTML('<p>~~strike~~</p>');
+        const p = root.querySelector('p')!;
+        const text = p.firstChild as Text;
+
+        const range = document.createRange();
+        range.setStart(text, 10);
+        range.setEnd(text, 10);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        const strike = root.querySelector('s');
+        expect(strike).not.toBeNull();
+        expect(strike?.textContent).toBe('strike');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
 });
