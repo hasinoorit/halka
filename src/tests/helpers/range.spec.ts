@@ -6,6 +6,7 @@ import {
 	isSelectedWholeContentAnElement,
 	isWrappedWith,
 	isWrappedWithClassName,
+	restoreSelectionByOffsets,
 	splitText,
 	unwrapWith
 } from '../../lib/helpers/range.js';
@@ -163,5 +164,33 @@ describe('range helpers', () => {
 		expect(container.firstChild).toBe(text);
 
 		document.body.removeChild(container);
+	});
+
+	it('restores selection in an empty paragraph editor', () => {
+		const editor = document.createElement('div');
+		editor.innerHTML = '<p><br></p>';
+		document.body.appendChild(editor);
+
+		const selection = window.getSelection()!;
+		restoreSelectionByOffsets(selection, editor, 0, 0);
+
+		expect(selection.rangeCount).toBe(1);
+
+		document.body.removeChild(editor);
+	});
+
+	it('skips non-editable text when restoring offsets', () => {
+		const editor = document.createElement('div');
+		editor.innerHTML = '<p>hello</p><span contenteditable="false">hidden</span>';
+		document.body.appendChild(editor);
+
+		const selection = window.getSelection()!;
+		restoreSelectionByOffsets(selection, editor, 3, 3);
+
+		expect(selection.rangeCount).toBe(1);
+		const range = selection.getRangeAt(0);
+		expect(range.startOffset).toBe(3);
+
+		document.body.removeChild(editor);
 	});
 });

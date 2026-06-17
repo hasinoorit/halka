@@ -1,5 +1,5 @@
 <script lang="ts">
-	import RichTextEditor from '../components/RichTextEditor.svelte';
+	import RichTextEditor from '../rich-text-editor/RichTextEditor.svelte';
 	import Button from '../components/ui/button.svelte';
 
 	let editorContent = $state(`
@@ -54,7 +54,12 @@
 				>
 			</div>
 		</div>
-
-		<RichTextEditor bind:content={editorContent} />
+		<form onsubmit={console.log} method="post">
+			<RichTextEditor bind:content={editorContent} />
+		</form>
+		<div>
+			<h2>Preview</h2>
+			<div>{@html editorContent}</div>
+		</div>
 	</div>
 </div>

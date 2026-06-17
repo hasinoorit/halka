@@ -121,7 +121,16 @@ export const pastePlugin = definePlugin({
 
             let content = '';
 
-            if (html) {
+            if (editor.inline) {
+                if (html) {
+                    editor.insertHTML(processPastedHTML(html, editor));
+                    return;
+                }
+                if (text) {
+                    editor.insertText(text.replace(/[\r\n]+/g, ' '));
+                    return;
+                }
+            } else if (html) {
                 content = processPastedHTML(html, editor);
             } else if (text) {
                 content = text

@@ -284,6 +284,20 @@ function getTextLength(node: Node): number {
 	return len;
 }
 
+function countEditableText(node: Node): number {
+	if (isElementNode(node) && (node as HTMLElement).getAttribute('contenteditable') === 'false') {
+		return 0;
+	}
+	if (isTextNode(node)) {
+		return node.data.length;
+	}
+	let total = 0;
+	for (let i = 0; i < node.childNodes.length; i++) {
+		total += countEditableText(node.childNodes[i]);
+	}
+	return total;
+}
+
 export {
 	isTextNode,
 	isElementNode,
@@ -307,5 +321,6 @@ export {
 	isMergeable,
 	mergeNodes,
 	mergeAdjacentChildren,
-	getTextLength
+	getTextLength,
+	countEditableText
 };

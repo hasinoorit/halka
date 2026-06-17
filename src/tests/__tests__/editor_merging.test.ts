@@ -83,7 +83,7 @@ describe('HalkaEditor Merging', () => {
             // Trigger merging
         });
 
-        expect(root.innerHTML).toBe('<strong>ab</strong>');
+        expect(root.innerHTML).toBe('<p><strong>ab</strong></p>');
     });
 
     it('reproduces user issue: merges rich and text in a paragraph', () => {

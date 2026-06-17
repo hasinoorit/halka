@@ -68,6 +68,7 @@ export function definePlugin(config: HalkaDeclarativePlugin): HalkaPlugin {
 export type HalkaOptions = {
 	plugins?: HalkaPlugin[];
 	shortcuts?: boolean;
+	inline?: boolean;
 };
 
 export interface EditorCommandMap {
@@ -181,6 +182,12 @@ export abstract class Editor {
 		return new Set(this._pendingFormats);
 	}
 
+	get inline(): boolean {
+		return false;
+	}
+
+	ensureDocumentStructure(): void {}
+
 	abstract getHTML(): string;
 	abstract setHTML(html: string): void;
 	abstract insertHTML(html: string): void;
@@ -279,7 +286,8 @@ export class HalkaEditor extends Editor {
 		super(root);
 		this.options = {
 			shortcuts: options.shortcuts ?? true,
-			plugins: options.plugins ?? []
+			plugins: options.plugins ?? [],
+			inline: options.inline ?? false
 		};
 
 		if (!this.root.isContentEditable) {
@@ -304,6 +312,11 @@ export class HalkaEditor extends Editor {
 
 		this.pluginCleanups = (this.options.plugins ?? []).map((plugin) => plugin(this));
 		this.registerDefaultNormalizers();
+		this.ensureDocumentStructure();
+	}
+
+	get inline(): boolean {
+		return this.options.inline;
 	}
 
 	get window(): Window {
@@ -406,6 +419,13 @@ export class HalkaEditor extends Editor {
 	}
 
 	insertText(text: string): void {
+		if (this.inline) {
+			text = text.replace(/[\r\n]+/g, ' ');
+		} else if (/[\r\n]/.test(text)) {
+			this.insertTextAsBlocks(text);
+			return;
+		}
+
 		this.runTransaction(() => {
 			const selection = this.getSelection();
 			if (!selection) return;
@@ -477,10 +497,10 @@ export class HalkaEditor extends Editor {
 		selection.addRange(range);
 		this.selection.normalize();
 
-		// Update internal saved state as well so that subsequent restorations
-		// use the new position.
-		this.savedSelectionRange = range.cloneRange();
-		this.savedSelectionOffsets = this.computeSelectionOffsets(range);
+		const liveRange =
+			selection.rangeCount > 0 ? selection.getRangeAt(0) : range;
+		this.savedSelectionRange = liveRange.cloneRange();
+		this.savedSelectionOffsets = this.computeSelectionOffsets(liveRange);
 	}
 
 	getSelectionOffsets(): { start: number; end: number } | undefined {
@@ -489,6 +509,7 @@ export class HalkaEditor extends Editor {
 
 	setSelectionOffsets(offsets: { start: number; end: number }): void {
 		this.savedSelectionOffsets = offsets;
+		this.savedSelectionRange = undefined;
 	}
 
 	setInlineStyle(style: string, value?: string): void {
@@ -568,6 +589,8 @@ export class HalkaEditor extends Editor {
 	}
 
 	toggleBlockFormat(format: string): void {
+		if (this.inline) return;
+
 		this.runTransaction(() => {
 			const tagName = this.getBlockTagName(format);
 			if (!tagName) return;
@@ -612,10 +635,81 @@ export class HalkaEditor extends Editor {
 	}
 
 	normalizeHTML(): void {
-		if (this.root.innerHTML.trim() === '') {
-			this.root.innerHTML = '<p><br></p>';
+		if (this.inline) {
+			this.normalizeInlineHTML();
 			return;
 		}
+		this.normalizeBlockHTML();
+	}
+
+	ensureDocumentStructure(): void {
+		if (!this.needsDocumentNormalization()) return;
+
+		const selection = this.window.getSelection();
+		const offsets =
+			selection &&
+			selection.rangeCount > 0 &&
+			this.root.contains(selection.getRangeAt(0).commonAncestorContainer)
+				? this.computeSelectionOffsets(selection.getRangeAt(0))
+				: this.savedSelectionOffsets;
+
+		const before = this.getHTML();
+		this.normalizeHTML();
+
+		if (offsets) {
+			const sel = this.window.getSelection();
+			if (sel) {
+				RangeHelpers.restoreSelectionByOffsets(
+					sel,
+					this.root,
+					offsets.start,
+					offsets.end
+				);
+				this.selection.normalize();
+			}
+		}
+		this.saveSelection();
+
+		const after = this.getHTML();
+		if (before !== after) {
+			this.emit('change', after);
+		}
+	}
+
+	private needsDocumentNormalization(): boolean {
+		if (this.inline) {
+			for (const child of this.root.childNodes) {
+				if (isElementNode(child) && this.schema.isBlock(child.tagName)) {
+					return true;
+				}
+			}
+
+			if (this.root.querySelector('br')) return true;
+
+			const walker = this.window.document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
+			while (walker.nextNode()) {
+				if (/[\r\n]/.test((walker.currentNode as Text).data)) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		if (this.root.innerHTML.trim() === '') return true;
+
+		for (const child of this.root.childNodes) {
+			if (this.isLooseRootChild(child)) return true;
+		}
+
+		const walker = this.window.document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
+		while (walker.nextNode()) {
+			if (/[\r\n]/.test((walker.currentNode as Text).data)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	applySelection(forceRestore: boolean = false): void {
@@ -652,18 +746,24 @@ export class HalkaEditor extends Editor {
 
 	runTransaction(cb: (editor: Editor) => void): void {
 		const beforeHTML = this.getHTML();
-		
+
 		const currentSelection = this.window.getSelection();
-		const hasActiveSelection = currentSelection && 
-			currentSelection.rangeCount > 0 && 
+		const hasActiveSelection =
+			currentSelection &&
+			currentSelection.rangeCount > 0 &&
 			this.root.contains(currentSelection.getRangeAt(0).commonAncestorContainer);
 
+		const preMutationOffsets =
+			hasActiveSelection && currentSelection!.rangeCount > 0
+				? this.computeSelectionOffsets(currentSelection!.getRangeAt(0))
+				: this.savedSelectionOffsets;
+
 		this.root.focus();
-		
+
 		if (!hasActiveSelection && (this.savedSelectionRange || this.savedSelectionOffsets)) {
 			this.applySelection(true);
 		}
-		
+
 		cb(this);
 
 		let merged = false;
@@ -677,12 +777,10 @@ export class HalkaEditor extends Editor {
 				}
 
 				if (this.root.contains(currentNode)) {
-					// Deep merge inside the container
 					if (NodeHelpers.mergeAdjacentChildren(currentNode, true)) {
 						merged = true;
 					}
 
-					// Walk up while ancestors cover only this container
 					while (
 						currentNode.parentElement &&
 						currentNode.parentElement !== this.root &&
@@ -691,9 +789,7 @@ export class HalkaEditor extends Editor {
 						currentNode = currentNode.parentElement;
 					}
 
-					// Normalize the parent if it's within root
 					if (currentNode.parentElement && this.root.contains(currentNode.parentElement)) {
-						// Only merge siblings at this level, don't recurse deeply into other branches
 						if (NodeHelpers.mergeAdjacentChildren(currentNode.parentElement, true)) {
 							merged = true;
 						}
@@ -704,9 +800,27 @@ export class HalkaEditor extends Editor {
 			console.error('Error during node merging:', e);
 		}
 
+		if (merged) {
+			this.reconcileSelectionAfterMutation(preMutationOffsets);
+		}
+
 		const afterHTML = this.getHTML();
 		if (afterHTML !== beforeHTML) {
+			const offsetsBeforeNormalize = this.savedSelectionOffsets ?? preMutationOffsets;
 			this.normalizeHTML();
+			if (offsetsBeforeNormalize) {
+				const selection = this.window.getSelection();
+				if (selection) {
+					RangeHelpers.restoreSelectionByOffsets(
+						selection,
+						this.root,
+						offsetsBeforeNormalize.start,
+						offsetsBeforeNormalize.end
+					);
+					this.selection.normalize();
+				}
+			}
+			this.saveSelection();
 			this.emit('change', this.getHTML());
 		}
 	}
@@ -718,7 +832,6 @@ export class HalkaEditor extends Editor {
 
 		this.window.document.removeEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.removeEventListener('blur', this.handleBlurBound);
-		// Use stored bound reference — anonymous arrow in old code was never removable
 		this.root.removeEventListener('focus', this.handleFocusBound);
 
 		for (const cleanup of this.pluginCleanups) {
@@ -727,6 +840,8 @@ export class HalkaEditor extends Editor {
 
 		this.listeners.clear();
 		this.shortcutListeners.clear();
+
+		super.destroy();
 	}
 
 	on<Name extends EditorEventName>(event: Name, callback: EventListener<Name>): void {
@@ -814,31 +929,15 @@ export class HalkaEditor extends Editor {
 	}
 
 	computeSelectionOffsets(range: Range): { start: number; end: number } | undefined {
-		// Count only editable text: skip contenteditable=false subtrees so that
-		// save and restore offsets are symmetric with findTextPositionAtOffset.
-		const countEditableText = (node: Node): number => {
-			if (isElementNode(node) && (node as HTMLElement).getAttribute('contenteditable') === 'false') {
-				return 0;
-			}
-			if (node.nodeType === Node.TEXT_NODE) {
-				return (node as Text).data.length;
-			}
-			let total = 0;
-			for (let i = 0; i < node.childNodes.length; i++) {
-				total += countEditableText(node.childNodes[i]);
-			}
-			return total;
-		};
-
 		const startRange = range.cloneRange();
 		startRange.selectNodeContents(this.root);
 		startRange.setEnd(range.startContainer, range.startOffset);
-		const start = countEditableText(startRange.cloneContents());
+		const start = NodeHelpers.countEditableText(startRange.cloneContents());
 
 		const endRange = range.cloneRange();
 		endRange.selectNodeContents(this.root);
 		endRange.setEnd(range.endContainer, range.endOffset);
-		const end = countEditableText(endRange.cloneContents());
+		const end = NodeHelpers.countEditableText(endRange.cloneContents());
 		return { start, end };
 	}
 
@@ -939,6 +1038,292 @@ export class HalkaEditor extends Editor {
 			newRange.selectNodeContents(targetLi);
 			newRange.collapse(true);
 			return newRange;
+		});
+	}
+
+	private reconcileSelectionAfterMutation(
+		offsets?: { start: number; end: number }
+	): void {
+		const selection = this.window.getSelection();
+		if (!selection) return;
+
+		const liveRange = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+		if (liveRange && this.isRangeInRoot(liveRange)) {
+			this.selection.normalize();
+			this.saveSelection();
+			return;
+		}
+
+		const restoreOffsets = offsets ?? this.savedSelectionOffsets;
+		if (restoreOffsets) {
+			RangeHelpers.restoreSelectionByOffsets(
+				selection,
+				this.root,
+				restoreOffsets.start,
+				restoreOffsets.end
+			);
+			this.selection.normalize();
+		}
+		this.saveSelection();
+	}
+
+	private isRangeInRoot(range: Range): boolean {
+		try {
+			return this.root.contains(range.startContainer);
+		} catch {
+			return false;
+		}
+	}
+
+	private normalizeBlockHTML(): void {
+		if (this.root.innerHTML.trim() === '') {
+			this.root.innerHTML = '<p><br></p>';
+			return;
+		}
+
+		this.wrapRootLooseNodes();
+		this.splitNewlinesInBlocks();
+		this.mergeAdjacentEmptyParagraphs();
+	}
+
+	private normalizeInlineHTML(): void {
+		if (this.root.innerHTML.trim() === '') {
+			this.root.innerHTML = '';
+			return;
+		}
+
+		const blockChildren = Array.from(this.root.childNodes).filter(
+			(node) => isElementNode(node) && this.schema.isBlock((node as Element).tagName)
+		);
+
+		for (const block of blockChildren) {
+			const parent = block.parentNode;
+			if (!parent) continue;
+			while (block.firstChild) {
+				parent.insertBefore(block.firstChild, block);
+			}
+			parent.removeChild(block);
+		}
+
+		const walker = this.window.document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
+		while (walker.nextNode()) {
+			const textNode = walker.currentNode as Text;
+			if (/[\r\n]/.test(textNode.data)) {
+				textNode.data = textNode.data.replace(/[\r\n]+/g, ' ');
+			}
+		}
+
+		const brElements = Array.from(this.root.querySelectorAll('br'));
+		for (const br of brElements) {
+			const space = this.createText(' ');
+			br.parentNode?.replaceChild(space, br);
+		}
+	}
+
+	private isLooseRootChild(node: Node): boolean {
+		if (node.nodeType === Node.TEXT_NODE) return true;
+		if (isElementNode(node)) {
+			const tag = node.tagName;
+			return this.schema.isInline(tag) || tag === 'BR';
+		}
+		return false;
+	}
+
+	private wrapRootLooseNodes(): void {
+		let i = 0;
+		while (i < this.root.childNodes.length) {
+			const child = this.root.childNodes[i];
+			if (!this.isLooseRootChild(child)) {
+				i++;
+				continue;
+			}
+
+			const looseNodes: Node[] = [];
+			while (i < this.root.childNodes.length && this.isLooseRootChild(this.root.childNodes[i])) {
+				looseNodes.push(this.root.childNodes[i]);
+				i++;
+			}
+			this.wrapNodesInParagraph(looseNodes);
+		}
+	}
+
+	private wrapNodesInParagraph(nodes: Node[]): void {
+		if (nodes.length === 0) return;
+
+		const first = nodes[0];
+		const emptyParagraph = this.findAdjacentEmptyParagraph(first);
+		if (emptyParagraph) {
+			emptyParagraph.replaceChildren();
+			for (const node of nodes) {
+				emptyParagraph.appendChild(node);
+			}
+			if (emptyParagraph.childNodes.length === 0) {
+				emptyParagraph.appendChild(this.createEl('br'));
+			}
+			return;
+		}
+
+		const paragraph = this.createEl('p');
+		first.parentNode?.insertBefore(paragraph, first);
+		for (const node of nodes) {
+			paragraph.appendChild(node);
+		}
+
+		if (paragraph.childNodes.length === 0) {
+			paragraph.appendChild(this.createEl('br'));
+		}
+	}
+
+	private findAdjacentEmptyParagraph(node: Node): HTMLElement | null {
+		for (const sibling of [node.previousSibling, node.nextSibling]) {
+			if (
+				sibling &&
+				isElementNode(sibling) &&
+				sibling.tagName === 'P' &&
+				this.isEmptyParagraph(sibling as HTMLElement)
+			) {
+				return sibling as HTMLElement;
+			}
+		}
+		return null;
+	}
+
+	private splitNewlinesInBlocks(): void {
+		const walker = this.window.document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
+		const textNodesToSplit: Text[] = [];
+
+		while (walker.nextNode()) {
+			const textNode = walker.currentNode as Text;
+			if (/[\r\n]/.test(textNode.data)) {
+				textNodesToSplit.push(textNode);
+			}
+		}
+
+		for (const textNode of textNodesToSplit) {
+			this.splitTextNodeIntoBlocks(textNode);
+		}
+	}
+
+	private splitTextNodeIntoBlocks(textNode: Text): void {
+		const parts = textNode.data.split(/\r?\n/);
+		if (parts.length <= 1) {
+			textNode.data = parts[0] ?? '';
+			return;
+		}
+
+		const block = NodeHelpers.getClosestBlockElement(textNode, this.root);
+		if (!block || block === this.root) return;
+
+		const tagName = block.tagName.toLowerCase();
+		const blockTag = this.schema.isBlock(tagName) ? tagName : 'p';
+
+		textNode.data = parts[0];
+
+		let insertAfter: Node = block;
+		for (let i = 1; i < parts.length; i++) {
+			const newBlock = this.createEl(blockTag as keyof HTMLElementTagNameMap);
+			if (parts[i]) {
+				newBlock.appendChild(this.createText(parts[i]));
+			} else {
+				newBlock.appendChild(this.createEl('br'));
+			}
+			insertAfter.parentNode?.insertBefore(newBlock, insertAfter.nextSibling);
+			insertAfter = newBlock;
+		}
+	}
+
+	private mergeAdjacentEmptyParagraphs(): void {
+		const paragraphs = Array.from(this.root.querySelectorAll('p'));
+		for (const paragraph of paragraphs) {
+			if (!this.isEmptyParagraph(paragraph as HTMLElement)) continue;
+
+			const prev = paragraph.previousElementSibling;
+			if (prev && prev.tagName === 'P' && this.isEmptyParagraph(prev as HTMLElement)) {
+				paragraph.remove();
+			}
+		}
+	}
+
+	private isEmptyParagraph(block: HTMLElement): boolean {
+		if (NodeHelpers.isEmpty(block)) return true;
+		return (
+			block.childNodes.length === 1 &&
+			isElementNode(block.firstChild!) &&
+			block.firstChild!.tagName === 'BR'
+		);
+	}
+
+	private findEmptyBlockForInsertion(range: Range): HTMLElement | null {
+		const block = NodeHelpers.getClosestBlockElement(range.commonAncestorContainer, this.root);
+		if (block && block !== this.root && this.isEmptyParagraph(block)) {
+			return block;
+		}
+
+		if (this.root.childNodes.length === 1) {
+			const onlyChild = this.root.firstChild;
+			if (
+				isElementNode(onlyChild) &&
+				onlyChild.tagName === 'P' &&
+				this.isEmptyParagraph(onlyChild as HTMLElement)
+			) {
+				return onlyChild as HTMLElement;
+			}
+		}
+
+		return null;
+	}
+
+	private insertTextAsBlocks(text: string): void {
+		const lines = text.split(/\r?\n/);
+		this.runTransaction(() => {
+			const selection = this.getSelection();
+			if (!selection) return;
+
+			const range = selection.getRangeAt(0);
+			range.deleteContents();
+
+			const emptyBlock = this.findEmptyBlockForInsertion(range);
+
+			if (emptyBlock) {
+				emptyBlock.replaceChildren();
+				if (lines[0]) {
+					emptyBlock.appendChild(this.createText(lines[0]));
+				} else {
+					emptyBlock.appendChild(this.createEl('br'));
+				}
+
+				let insertAfter: Node = emptyBlock;
+				for (let i = 1; i < lines.length; i++) {
+					const paragraph = this.createEl('p');
+					if (lines[i]) {
+						paragraph.appendChild(this.createText(lines[i]));
+					} else {
+						paragraph.appendChild(this.createEl('br'));
+					}
+					insertAfter.parentNode?.insertBefore(paragraph, insertAfter.nextSibling);
+					insertAfter = paragraph;
+				}
+
+				this.selection.setCursorAfter(insertAfter);
+				return;
+			}
+
+			const fragment = this.window.document.createDocumentFragment();
+			for (let i = 0; i < lines.length; i++) {
+				const paragraph = this.createEl('p');
+				if (lines[i]) {
+					paragraph.appendChild(this.createText(lines[i]));
+				} else {
+					paragraph.appendChild(this.createEl('br'));
+				}
+				fragment.appendChild(paragraph);
+			}
+
+			const lastNode = fragment.lastChild;
+			if (!lastNode) return;
+
+			range.insertNode(fragment);
+			this.selection.setCursorAfter(lastNode);
 		});
 	}
 

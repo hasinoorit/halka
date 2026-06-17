@@ -8,6 +8,12 @@ const createRoot = () => {
 	return root;
 };
 
+const getParagraphText = (root: HTMLElement): Text => {
+	const paragraph = root.querySelector('p');
+	expect(paragraph?.firstChild?.nodeType).toBe(Node.TEXT_NODE);
+	return paragraph!.firstChild as Text;
+};
+
 describe('HalkaEditor', () => {
 	it('registers and executes commands', () => {
 		const root = createRoot();
@@ -64,7 +70,7 @@ describe('HalkaEditor', () => {
 		const editor = new HalkaEditor(root, { shortcuts: false });
 
 		editor.setHTML('hello world');
-		const text = root.firstChild as Text;
+		const text = getParagraphText(root);
 
 		const range = document.createRange();
 		range.setStart(text, 0);
@@ -88,7 +94,7 @@ describe('HalkaEditor', () => {
 		const editor = new HalkaEditor(root, { shortcuts: false });
 
 		editor.setHTML('hello world');
-		const text = root.firstChild as Text;
+		const text = getParagraphText(root);
 
 		const range = document.createRange();
 		range.setStart(text, 0);
@@ -177,7 +183,7 @@ describe('HalkaEditor', () => {
 		const editor = new HalkaEditor(root, { shortcuts: false });
 
 		editor.setHTML('hello');
-		const text = root.firstChild as Text;
+		const text = getParagraphText(root);
 
 		const range = document.createRange();
 		range.setStart(text, 0);
@@ -567,5 +573,135 @@ describe('HalkaEditor', () => {
 
 		document.body.removeChild(root);
 		editor.destroy();
+	});
+
+	describe('block mode normalization', () => {
+		it('wraps loose text in a paragraph', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML('abc');
+
+			expect(editor.getHTML()).toBe('<p>abc</p>');
+			expect(
+				Array.from(root.childNodes).some((node) => node.nodeType === Node.TEXT_NODE)
+			).toBe(false);
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('splits multiline text into paragraphs', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML('a\nb');
+
+			expect(editor.getHTML()).toBe('<p>a</p><p>b</p>');
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('inserts multiline text as separate paragraphs', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML('<p><br></p>');
+			editor.insertText('line one\nline two');
+
+			expect(editor.getHTML()).toBe('<p>line one</p><p>line two</p>');
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('normalizes browser input that places text directly in root', () => {
+			const root = createRoot();
+			root.appendChild(document.createTextNode('Hello'));
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			expect(editor.getHTML()).toBe('<p>Hello</p>');
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+	});
+
+	describe('inline mode', () => {
+		it('flattens block HTML to inline content', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false, inline: true });
+
+			editor.setHTML('<p>hello</p>');
+
+			expect(editor.getHTML()).toBe('hello');
+			expect(root.querySelector('p')).toBeNull();
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('strips newlines from content', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false, inline: true });
+
+			editor.setHTML('hello\nworld');
+
+			expect(editor.getHTML()).toBe('hello world');
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('keeps empty editor without block placeholder', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false, inline: true });
+
+			editor.setHTML('');
+
+			expect(editor.getHTML()).toBe('');
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+	});
+
+	describe('selection persistence', () => {
+		it('uses offsets when native range is stale', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML('<p>hello world</p>');
+			editor.setSelectionOffsets({ start: 6, end: 6 });
+			editor.applySelection(true);
+
+			expect(editor.getSelectionOffsets()).toEqual({ start: 6, end: 6 });
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('preserves selection offset after block format toggle', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML('<p>hello world</p>');
+			const text = getParagraphText(root);
+
+			const range = document.createRange();
+			range.setStart(text, 6);
+			range.setEnd(text, 6);
+			editor.setSelection(range);
+
+			const before = editor.getSelectionOffsets();
+			editor.toggleBlockFormat('h1');
+			const after = editor.getSelectionOffsets();
+
+			expect(after).toEqual(before);
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
 	});
 });

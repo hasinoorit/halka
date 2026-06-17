@@ -44,6 +44,7 @@
 	onMount(() => {
 		if (editorElement) {
 			editor = new HalkaEditor(editorElement, {
+				inline: true,
 				plugins: [linkPlugin, placeholderPlugin('')],
 				shortcuts: true
 			});

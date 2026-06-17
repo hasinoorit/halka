@@ -152,10 +152,9 @@ export class Transform {
 	deleteSelection(): this {
 		this.editor.runTransaction(() => {
 			const range = this.editor.getRange();
-			const startNode = range.startContainer;
-			const startOffset = range.startOffset;
 			range.deleteContents();
-			this.editor.selection.setCursorAt(startNode, startOffset);
+			range.collapse(true);
+			this.editor.selection.setCursorAt(range.startContainer, range.startOffset);
 		});
 		return this;
 	}

@@ -1,19 +1,45 @@
 import type { Editor } from './editor.js';
 
 export class InputManager {
-	// Store bound handler so destroy() can properly remove it
 	private boundHandleBeforeInput: (event: InputEvent) => void;
+	private boundHandleInput: () => void;
 
 	constructor(private editor: Editor) {
 		this.boundHandleBeforeInput = this.handleBeforeInput.bind(this);
+		this.boundHandleInput = this.handleInput.bind(this);
 		this.init();
 	}
 
 	private init() {
 		this.editor.root.addEventListener('beforeinput', this.boundHandleBeforeInput);
+		this.editor.root.addEventListener('input', this.boundHandleInput);
+	}
+
+	private handleInput() {
+		this.editor.ensureDocumentStructure();
 	}
 
 	private handleBeforeInput(event: InputEvent) {
+		if (this.editor.inline) {
+			if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
+				event.preventDefault();
+				return;
+			}
+
+			if (event.inputType === 'insertText' && event.data && /[\r\n]/.test(event.data)) {
+				event.preventDefault();
+				const text = event.data.replace(/[\r\n]+/g, ' ');
+				if (text) {
+					this.insertTextWithFormats(text);
+				}
+				return;
+			}
+		} else if (event.inputType === 'insertText' && event.data && /[\r\n]/.test(event.data)) {
+			event.preventDefault();
+			this.insertTextWithFormats(event.data);
+			return;
+		}
+
 		if (event.inputType === 'insertText' && event.data) {
 			const sel = this.editor.getSelection();
 			if (sel && sel.rangeCount > 0) {
@@ -39,6 +65,7 @@ export class InputManager {
 					}
 				}
 			}
+
 			const pendingFormats = this.editor.getPendingFormats();
 			if (pendingFormats.size > 0) {
 				event.preventDefault();
@@ -48,7 +75,18 @@ export class InputManager {
 		}
 	}
 
+	private insertTextWithFormats(text: string): void {
+		const pendingFormats = this.editor.getPendingFormats();
+		if (pendingFormats.size > 0) {
+			this.editor.transforms.insertText(text, pendingFormats);
+			this.editor.clearPendingFormats();
+		} else {
+			this.editor.insertText(text);
+		}
+	}
+
 	destroy() {
 		this.editor.root.removeEventListener('beforeinput', this.boundHandleBeforeInput);
+		this.editor.root.removeEventListener('input', this.boundHandleInput);
 	}
 }

@@ -9,7 +9,7 @@ import {
 	isTextNode,
 	isEmpty,
 	unwrap,
-	getTextLength
+	countEditableText
 } from './node.js';
 
 const ZERO_WITH_TEXT_NODE = (win?: Window): Text => (win ?? window).document.createTextNode('\u200B');
@@ -507,7 +507,7 @@ function restoreSelectionByOffsets(
 
 	// Fallback 2: Clamp to document end if offsets are out of bounds
 	if (!startPos || !endPos) {
-		const totalLength = getTextLength(editor);
+		const totalLength = countEditableText(editor);
 
 		if (!startPos) {
 			const clampedStart = Math.min(start, totalLength);
@@ -520,12 +520,13 @@ function restoreSelectionByOffsets(
 		}
 	}
 
-	// Final Fallback: Select end of editor
+	// Final fallback: collapse at end of editor (e.g. empty <p><br></p>)
 	if (!startPos || !endPos) {
-		// If still failing (e.g. empty editor), try to select the editor itself or first child
-		// But usually findTextPositionAtOffset handles empty text nodes if configured?
-		// Actually, if editor is empty block, there might be no text nodes.
-		// We should handle empty editor case.
+		const range = editor.ownerDocument.createRange();
+		range.selectNodeContents(editor);
+		range.collapse(false);
+		selection.removeAllRanges();
+		selection.addRange(range);
 		return;
 	}
 
