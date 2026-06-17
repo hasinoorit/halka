@@ -127,7 +127,7 @@
 				]
 			});
 			editor.setHTML(content);
-			editor.on('change', (html: string) => {
+			editor.on('change', (html: any) => {
 				onChange?.(html ?? '');
 				if (content !== html) {
 					content = html;
