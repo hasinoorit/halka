@@ -1,4 +1,5 @@
 import { type Editor, definePlugin } from '../core/editor.js';
+import { isHorizontalRule } from '../helpers/markdown.js';
 
 const SHORTCUTS: Record<string, string> = {
 	'#': 'h1',
@@ -125,58 +126,98 @@ function isInlineShortcutAllowed(block: Element): boolean {
 	return tag !== 'PRE' && tag !== 'CODE';
 }
 
+function insertHorizontalRule(
+	editor: Editor,
+	block: Element,
+	range: Range,
+	marker: string
+): void {
+	removeTextBeforeCursor(block, range, marker);
+
+	const parent = block.parentElement;
+	if (!parent) return;
+
+	const hr = editor.createEl('hr');
+	const paragraph = editor.createEl('p');
+	paragraph.appendChild(block.ownerDocument.createTextNode('\u00A0'));
+
+	const blockIsEmpty = !block.textContent || block.textContent.trim() === '';
+
+	if (blockIsEmpty) {
+		parent.replaceChild(hr, block);
+		parent.insertBefore(paragraph, hr.nextSibling);
+	} else {
+		parent.insertBefore(hr, block.nextSibling);
+		parent.insertBefore(paragraph, hr.nextSibling);
+	}
+
+	editor.selection.setCursorAtStart(paragraph);
+}
+
+function handleMarkdownShortcut(editor: Editor, event: KeyboardEvent): void {
+	const range = editor.getRange();
+	if (!range.collapsed) return;
+
+	const block = editor.query.getCurrentBlock();
+	if (!block) return;
+
+	const beforeCursor = getTextBeforeCursor(block, range).trim();
+
+	if (isHorizontalRule(beforeCursor) && (event.key === ' ' || event.key === 'Enter')) {
+		event.preventDefault();
+
+		editor.runTransaction(() => {
+			insertHorizontalRule(editor, block, range, beforeCursor);
+		});
+		return;
+	}
+
+	if (event.key !== ' ') return;
+
+	if (SHORTCUTS[beforeCursor]) {
+		const format = SHORTCUTS[beforeCursor];
+		event.preventDefault();
+
+		editor.runTransaction((ed) => {
+			removeTextBeforeCursor(block, range, beforeCursor);
+			ed.toggleBlockFormat(format);
+		});
+		return;
+	}
+
+	if (LIST_SHORTCUTS[beforeCursor]) {
+		const command = LIST_SHORTCUTS[beforeCursor];
+		event.preventDefault();
+
+		editor.runTransaction((ed) => {
+			removeTextBeforeCursor(block, range, beforeCursor);
+			ed.execCommand(command);
+		});
+		return;
+	}
+
+	if (!isInlineShortcutAllowed(block)) return;
+
+	const rawBefore = getTextBeforeCursor(block, range);
+
+	for (const rule of INLINE_RULES) {
+		const match = rawBefore.match(rule.pattern);
+		if (!match) continue;
+
+		event.preventDefault();
+
+		editor.runTransaction(() => {
+			applyInlineFormat(editor, block, range, match[0], match[1], rule.tagName);
+		});
+		return;
+	}
+}
+
 export const markdownShortcutsPlugin = definePlugin({
 	name: 'markdown-shortcuts',
 	events: {
 		keydown: (editor: Editor, event: Event) => {
-			const keyboardEvent = event as KeyboardEvent;
-			if (keyboardEvent.key !== ' ') return;
-
-			const range = editor.getRange();
-			if (!range.collapsed) return;
-
-			const block = editor.query.getCurrentBlock();
-			if (!block) return;
-
-			const beforeCursor = getTextBeforeCursor(block, range).trim();
-
-			if (SHORTCUTS[beforeCursor]) {
-				const format = SHORTCUTS[beforeCursor];
-				keyboardEvent.preventDefault();
-
-				editor.runTransaction((ed) => {
-					removeTextBeforeCursor(block, range, beforeCursor);
-					ed.toggleBlockFormat(format);
-				});
-				return;
-			}
-
-			if (LIST_SHORTCUTS[beforeCursor]) {
-				const command = LIST_SHORTCUTS[beforeCursor];
-				keyboardEvent.preventDefault();
-
-				editor.runTransaction((ed) => {
-					removeTextBeforeCursor(block, range, beforeCursor);
-					ed.execCommand(command);
-				});
-				return;
-			}
-
-			if (!isInlineShortcutAllowed(block)) return;
-
-			const rawBefore = getTextBeforeCursor(block, range);
-
-			for (const rule of INLINE_RULES) {
-				const match = rawBefore.match(rule.pattern);
-				if (!match) continue;
-
-				keyboardEvent.preventDefault();
-
-				editor.runTransaction(() => {
-					applyInlineFormat(editor, block, range, match[0], match[1], rule.tagName);
-				});
-				return;
-			}
+			handleMarkdownShortcut(editor, event as KeyboardEvent);
 		}
 	}
 });

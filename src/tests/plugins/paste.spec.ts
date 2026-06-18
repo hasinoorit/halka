@@ -108,4 +108,76 @@ describe('pastePlugin', () => {
         document.body.removeChild(root);
         editor.destroy();
     });
+
+    it('converts pasted markdown plain text into HTML', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [pastePlugin] });
+
+        editor.setHTML('');
+        const range = document.createRange();
+        range.selectNodeContents(root);
+        editor.setSelection(range);
+
+        const markdown = '# Heading\n\n**bold** and *italic*\n\n- item one\n- item two';
+        const event = createPasteEvent('', markdown);
+
+        root.dispatchEvent(event);
+
+        const html = editor.getHTML();
+        expect(html).toContain('<h1>Heading</h1>');
+        expect(html).toContain('<strong>bold</strong>');
+        expect(html).toContain('<em>italic</em>');
+        expect(html).toContain('<ul>');
+        expect(html).toContain('<li>item one</li>');
+        expect(html).toContain('<li>item two</li>');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
+
+    it('replaces empty block when pasting markdown with cursor inside it', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [pastePlugin] });
+
+        editor.setHTML('');
+        const paragraph = root.querySelector('p')!;
+        const range = document.createRange();
+        range.setStart(paragraph, 0);
+        range.collapse(true);
+        editor.setSelection(range);
+
+        const markdown = '# Heading\n\n**bold**';
+        const event = createPasteEvent('', markdown);
+        root.dispatchEvent(event);
+
+        const html = editor.getHTML();
+        expect(html).toBe('<h1>Heading</h1><p><strong>bold</strong></p>');
+        expect(html).not.toMatch(/^<p><br><\/p>/);
+        expect(html).not.toMatch(/^<p><\/p>/);
+        expect(html).not.toMatch(/^<p>\s*<h1>/);
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
+
+    it('converts pasted horizontal rules', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [pastePlugin] });
+
+        editor.setHTML('');
+        const range = document.createRange();
+        range.selectNodeContents(root);
+        editor.setSelection(range);
+
+        const event = createPasteEvent('', 'Above\n\n---\n\nBelow');
+        root.dispatchEvent(event);
+
+        const html = editor.getHTML();
+        expect(html).toContain('<hr>');
+        expect(html).toContain('Above');
+        expect(html).toContain('Below');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
 });

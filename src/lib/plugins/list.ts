@@ -1,4 +1,10 @@
 import { Node as NodeHelpers, isElementNode } from '../helpers/index.js';
+import {
+	findListItem,
+	getListParent,
+	outdentTopLevelListItem,
+	unnestListItem
+} from '../helpers/list.js';
 import { type Editor, definePlugin } from '../core/editor.js';
 
 const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): void => {
@@ -193,101 +199,34 @@ const outdentList = (editor: Editor): void => {
 			return;
 		}
 
-		let listItem: HTMLElement | null = null;
-		let parent = range.commonAncestorContainer;
-		while (parent && parent !== root) {
-			if (isElementNode(parent) && (parent as HTMLElement).tagName === 'LI') {
-				listItem = parent as HTMLElement;
-				break;
-			}
-			parent = parent.parentElement as Node;
-		}
-
+		const listItem = findListItem(range.commonAncestorContainer, root);
 		if (!listItem) return;
 
-		const parentList = listItem.parentElement;
-		if (!parentList || (parentList.tagName !== 'UL' && parentList.tagName !== 'OL')) return;
+		const parentList = getListParent(listItem);
+		if (!parentList) return;
 
 		const grandParentListItem = parentList.parentElement;
 
-
-		// If grandparent is LI, we are nested -> Un-nest one level
 		if (grandParentListItem && grandParentListItem.tagName === 'LI') {
-			const greatGrandParentList = grandParentListItem.parentElement;
-			if (greatGrandParentList) {
-				// Move listItem to after grandParentListItem
-				grandParentListItem.after(listItem);
+			unnestListItem(listItem, parentList);
 
-				// If parentList is now empty, remove it
-				if (parentList.children.length === 0) {
-					parentList.remove();
+			if (wasCollapsed && startContainer) {
+				const newRange = editor.window.document.createRange();
+				try {
+					newRange.setStart(startContainer, startOffset);
+				} catch {
+					newRange.selectNodeContents(listItem);
+					newRange.collapse(true);
 				}
-				// Restore caret precisely when original selection was collapsed
-				if (wasCollapsed && startContainer) {
-					const newRange = editor.window.document.createRange();
-					try {
-						newRange.setStart(startContainer, startOffset);
-					} catch {
-						newRange.selectNodeContents(listItem);
-						newRange.collapse(true);
-					}
-					editor.setSelection(newRange);
-				} else {
-					editor.applySelection();
-				}
-				return;
-			}
-		}
-
-		// Top level outdent
-		const paragraph = editor.createEl('p');
-		if (listItem.getAttribute('style')) {
-			paragraph.setAttribute('style', listItem.getAttribute('style') ?? '');
-		}
-
-		const children = Array.from(listItem.childNodes);
-		const nestedLists: HTMLElement[] = [];
-		
-		children.forEach(child => {
-			const el = child as HTMLElement;
-			if (isElementNode(child) && (el.tagName === 'UL' || el.tagName === 'OL')) {
-				nestedLists.push(el);
+				editor.setSelection(newRange);
 			} else {
-				paragraph.appendChild(child);
+				editor.applySelection();
 			}
-		});
-
-		// Split the list
-		const nextSiblings: Element[] = [];
-		let next = listItem.nextElementSibling;
-		while (next) {
-			nextSiblings.push(next);
-			next = next.nextElementSibling;
+			return;
 		}
 
-		if (nextSiblings.length > 0) {
-			const newList = editor.createEl(parentList.tagName as 'UL' | 'OL');
-			if (parentList.getAttribute('style')) {
-				newList.setAttribute('style', parentList.getAttribute('style') ?? '');
-			}
-			nextSiblings.forEach((sib) => newList.appendChild(sib));
-			parentList.after(newList);
-		}
+		const paragraph = outdentTopLevelListItem(editor, listItem);
 
-		parentList.after(paragraph);
-		listItem.remove();
-
-		if (nestedLists.length > 0) {
-			nestedLists.forEach(list => {
-				paragraph.after(list);
-			});
-		}
-
-		if (parentList.children.length === 0) {
-			parentList.remove();
-		}
-
-		// Restore caret precisely when original selection was collapsed
 		if (wasCollapsed && startContainer) {
 			const newRange = editor.window.document.createRange();
 			try {

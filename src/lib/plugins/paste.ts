@@ -1,8 +1,10 @@
 import { type Editor, definePlugin } from '../core/editor.js';
 import { Node as NodeHelpers } from '../helpers/index.js';
+import { markdownToHtml } from '../helpers/markdown.js';
 
-const ALLOWED_BLOCK_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'UL', 'OL', 'TABLE', 'PRE']);
-const ALLOWED_INLINE_TAGS = new Set(['B', 'I', 'U', 'STRONG', 'EM', 'A', 'SPAN', 'CODE', 'SUB', 'SUP', 'MARK', 'BR']);
+const ALLOWED_BLOCK_TAGS = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'TABLE', 'PRE']);
+const ALLOWED_INLINE_TAGS = new Set(['B', 'I', 'U', 'STRONG', 'EM', 'A', 'SPAN', 'CODE', 'SUB', 'SUP', 'MARK', 'BR', 'S', 'STRIKE']);
+const ALLOWED_VOID_TAGS = new Set(['BR', 'HR']);
 const BLACKLIST_TAGS = new Set(['SCRIPT', 'STYLE', 'META', 'LINK', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'APPLET', 'SVG', 'MATH']);
 
 const sanitizeNode = (node: Node, editor: Editor): Node | null => {
@@ -19,6 +21,10 @@ const sanitizeNode = (node: Node, editor: Editor): Node | null => {
 
     if (BLACKLIST_TAGS.has(tagName)) {
         return null;
+    }
+
+    if (ALLOWED_VOID_TAGS.has(tagName)) {
+        return editor.createEl(tagName.toLowerCase());
     }
 
     // If tag is not allowed, but its children might be (e.g. section, div)
@@ -70,18 +76,23 @@ const processPastedHTML = (html: string, editor: Editor): string => {
         return currentParagraph;
     };
 
+    const isBlockNode = (node: Node): boolean =>
+        NodeHelpers.isElementNode(node) &&
+        (ALLOWED_BLOCK_TAGS.has((node as HTMLElement).tagName) ||
+            ALLOWED_VOID_TAGS.has((node as HTMLElement).tagName));
+
     Array.from(body.childNodes).forEach((node) => {
         const cleanNode = sanitizeNode(node, editor);
         if (!cleanNode) return;
 
         // If it's a block, append directly and reset currentParagraph
-        if (NodeHelpers.isElementNode(cleanNode) && ALLOWED_BLOCK_TAGS.has((cleanNode as HTMLElement).tagName)) {
+        if (isBlockNode(cleanNode)) {
             fragment.appendChild(cleanNode);
             currentParagraph = null;
         } else if (cleanNode.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
             // Handle fragments (from disallowed tags)
             Array.from(cleanNode.childNodes).forEach(child => {
-                if (NodeHelpers.isElementNode(child) && ALLOWED_BLOCK_TAGS.has((child as HTMLElement).tagName)) {
+                if (isBlockNode(child)) {
                     fragment.appendChild(child);
                     currentParagraph = null;
                 } else {
@@ -133,11 +144,7 @@ export const pastePlugin = definePlugin({
             } else if (html) {
                 content = processPastedHTML(html, editor);
             } else if (text) {
-                content = text
-                    .split(/\r?\n/)
-                    .map((line) => line.trim() ? `<p>${line}</p>` : '')
-                    .filter(Boolean)
-                    .join('');
+                content = processPastedHTML(markdownToHtml(text), editor);
             }
 
             if (content) {

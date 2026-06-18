@@ -1,4 +1,5 @@
 import type { Editor } from './editor.js';
+import { handleDeleteContentBackward } from './block-delete.js';
 
 export class InputManager {
 	private boundHandleBeforeInput: (event: InputEvent) => void;
@@ -21,6 +22,12 @@ export class InputManager {
 	}
 
 	private handleBeforeInput(event: InputEvent) {
+		if (event.inputType === 'deleteContentBackward') {
+			if (handleDeleteContentBackward(this.editor, event)) {
+				return;
+			}
+		}
+
 		if (this.editor.inline) {
 			if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
 				event.preventDefault();

@@ -1,4 +1,5 @@
 import { Range as RangeHelpers, Node as NodeHelpers, isElementNode } from '../helpers/index.js';
+import { isEmptyBlock } from '../helpers/block.js';
 import { Schema } from './schema.js';
 import { Query } from './query.js';
 import { Transform } from './transform.js';
@@ -412,11 +413,21 @@ export class HalkaEditor extends Editor {
 			const range = selection.getRangeAt(0);
 			range.deleteContents();
 			const fragment = range.createContextualFragment(html);
-			
-			// We need to find the last inserted node to set cursor after it
+
 			const lastNode = fragment.lastChild;
 			if (!lastNode) return;
-			
+
+			const emptyBlock = !this.inline ? this.findEmptyBlockForInsertion(range) : null;
+			if (emptyBlock?.parentNode) {
+				const parent = emptyBlock.parentNode;
+				while (fragment.firstChild) {
+					parent.insertBefore(fragment.firstChild, emptyBlock);
+				}
+				emptyBlock.remove();
+				this.selection.setCursorAfter(lastNode);
+				return;
+			}
+
 			range.insertNode(fragment);
 			this.selection.setCursorAfter(lastNode);
 		});
@@ -1137,6 +1148,7 @@ export class HalkaEditor extends Editor {
 		this.wrapRootLooseNodes();
 		this.splitNewlinesInBlocks();
 		this.mergeAdjacentEmptyParagraphs();
+		this.removeOrphanedEmptyRootBlocks();
 	}
 
 	private normalizeInlineHTML(): void {
@@ -1233,7 +1245,7 @@ export class HalkaEditor extends Editor {
 				sibling &&
 				isElementNode(sibling) &&
 				sibling.tagName === 'P' &&
-				this.isEmptyParagraph(sibling as HTMLElement)
+				isEmptyBlock(sibling as HTMLElement)
 			) {
 				return sibling as HTMLElement;
 			}
@@ -1288,27 +1300,39 @@ export class HalkaEditor extends Editor {
 	private mergeAdjacentEmptyParagraphs(): void {
 		const paragraphs = Array.from(this.root.querySelectorAll('p'));
 		for (const paragraph of paragraphs) {
-			if (!this.isEmptyParagraph(paragraph as HTMLElement)) continue;
+			if (!isEmptyBlock(paragraph as HTMLElement)) continue;
 
 			const prev = paragraph.previousElementSibling;
-			if (prev && prev.tagName === 'P' && this.isEmptyParagraph(prev as HTMLElement)) {
+			if (prev && prev.tagName === 'P' && isEmptyBlock(prev as HTMLElement)) {
 				paragraph.remove();
 			}
 		}
 	}
 
-	private isEmptyParagraph(block: HTMLElement): boolean {
-		if (NodeHelpers.isEmpty(block)) return true;
-		return (
-			block.childNodes.length === 1 &&
-			isElementNode(block.firstChild!) &&
-			block.firstChild!.tagName === 'BR'
-		);
+	private removeOrphanedEmptyRootBlocks(): void {
+		const isSolePlaceholder =
+			this.root.childNodes.length === 1 &&
+			isElementNode(this.root.firstChild!) &&
+			this.root.firstChild!.tagName === 'P' &&
+			isEmptyBlock(this.root.firstChild as HTMLElement);
+
+		if (isSolePlaceholder) return;
+
+		for (const child of Array.from(this.root.children)) {
+			if (!isElementNode(child)) continue;
+
+			const tag = child.tagName.toUpperCase();
+			if (tag === 'P' || tag === 'UL' || tag === 'OL' || tag === 'TABLE') continue;
+			if (!this.schema.isBlock(tag)) continue;
+			if (!isEmptyBlock(child as HTMLElement)) continue;
+
+			child.remove();
+		}
 	}
 
 	private findEmptyBlockForInsertion(range: Range): HTMLElement | null {
 		const block = NodeHelpers.getClosestBlockElement(range.commonAncestorContainer, this.root);
-		if (block && block !== this.root && this.isEmptyParagraph(block)) {
+		if (block && block !== this.root && isEmptyBlock(block)) {
 			return block;
 		}
 
@@ -1316,8 +1340,8 @@ export class HalkaEditor extends Editor {
 			const onlyChild = this.root.firstChild;
 			if (
 				isElementNode(onlyChild) &&
-				onlyChild.tagName === 'P' &&
-				this.isEmptyParagraph(onlyChild as HTMLElement)
+				this.schema.isBlock(onlyChild.tagName) &&
+				isEmptyBlock(onlyChild as HTMLElement)
 			) {
 				return onlyChild as HTMLElement;
 			}

@@ -195,4 +195,49 @@ describe('markdownShortcutsPlugin', () => {
         document.body.removeChild(root);
         editor.destroy();
     });
+
+    it('converts --- to horizontal rule on space', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [markdownShortcutsPlugin] });
+
+        editor.setHTML('<p>---</p>');
+        const p = root.querySelector('p')!;
+        const text = p.firstChild as Text;
+
+        const range = document.createRange();
+        range.setStart(text, 3);
+        range.setEnd(text, 3);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        expect(root.querySelector('hr')).not.toBeNull();
+        expect(root.querySelectorAll('p').length).toBe(1);
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
+
+    it('converts --- to horizontal rule on enter', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, { shortcuts: false, plugins: [markdownShortcutsPlugin] });
+
+        editor.setHTML('<p>---</p>');
+        const p = root.querySelector('p')!;
+        const text = p.firstChild as Text;
+
+        const range = document.createRange();
+        range.setStart(text, 3);
+        range.setEnd(text, 3);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        expect(root.querySelector('hr')).not.toBeNull();
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
 });

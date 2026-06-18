@@ -67,6 +67,6 @@
 				>
 			</div>
 		</div>
-		<RichTextEditor bind:content={editorContent} />
+		<RichTextEditor placeholder="Write something..." bind:content={editorContent} />
 	</div>
 </div>

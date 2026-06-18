@@ -1,9 +1,9 @@
 {
 	"name": "halka",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/hasinoorit/halka.git"
+		"url": "git+https://github.com/hasinoorit/halka.git"
 	},
 	"scripts": {
 		"dev": "vite dev",

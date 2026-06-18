@@ -1,5 +1,17 @@
 import type { Editor } from './editor.js';
-import { isTextNode } from '../helpers/node.js';
+import { isElementNode, isTextNode } from '../helpers/node.js';
+
+function isNodeEffectivelyEmpty(node: Node): boolean {
+	if (isTextNode(node)) return node.textContent?.trim() === '';
+	if (!isElementNode(node)) return true;
+	if (node.tagName === 'BR') return true;
+	return Array.from(node.childNodes).every(isNodeEffectivelyEmpty);
+}
+
+function isFragmentEffectivelyEmpty(fragment: DocumentFragment): boolean {
+	if (!fragment.hasChildNodes()) return true;
+	return Array.from(fragment.childNodes).every(isNodeEffectivelyEmpty);
+}
 
 /**
  * Enhanced Selection API
@@ -91,6 +103,16 @@ export class HalkaSelection {
 	 * Set cursor at the end of a node's contents
 	 */
 	setCursorAtEnd(node: Node): this {
+		const walker = this.editor.window.document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+		let lastText: Text | null = null;
+		while (walker.nextNode()) {
+			lastText = walker.currentNode as Text;
+		}
+
+		if (lastText) {
+			return this.setCursorAt(lastText, lastText.length);
+		}
+
 		const range = this.editor.window.document.createRange();
 		range.selectNodeContents(node);
 		range.collapse(false);
@@ -147,55 +169,46 @@ export class HalkaSelection {
 	 * Check if selection is at the start of the current block
 	 */
 	isAtStart(): boolean {
-		const range = this.range;
+		return this.isAtBlockStart();
+	}
+
+	isAtBlockStart(): boolean {
+		if (!this.isCollapsed) return false;
+
 		const block = this.editor.query.getCurrentBlock();
 		if (!block) return false;
 
-		const { startContainer, startOffset } = range;
+		const range = this.range;
+		const probe = this.editor.window.document.createRange();
+		probe.selectNodeContents(block);
+		probe.setEnd(range.startContainer, range.startOffset);
 
-		// If we're at the first text node at offset 0
-		if (isTextNode(startContainer)) {
-			if (startOffset !== 0) return false;
-			// Check if this is the first text node in the block
-			const walker = this.editor.window.document.createTreeWalker(
-				block,
-				NodeFilter.SHOW_TEXT,
-				null
-			);
-			const firstText = walker.nextNode();
-			return firstText === startContainer;
-		}
+		if (probe.collapsed) return true;
 
-		return false;
+		return isFragmentEffectivelyEmpty(probe.cloneContents());
 	}
 
 	/**
 	 * Check if selection is at the end of the current block
 	 */
 	isAtEnd(): boolean {
-		const range = this.range;
+		return this.isAtBlockEnd();
+	}
+
+	isAtBlockEnd(): boolean {
+		if (!this.isCollapsed) return false;
+
 		const block = this.editor.query.getCurrentBlock();
 		if (!block) return false;
 
-		const { endContainer, endOffset } = range;
+		const range = this.range;
+		const probe = this.editor.window.document.createRange();
+		probe.selectNodeContents(block);
+		probe.setStart(range.startContainer, range.startOffset);
 
-		// If we're at the last text node at its length
-		if (isTextNode(endContainer)) {
-			if (endOffset !== endContainer.textContent?.length) return false;
-			// Check if this is the last text node in the block
-			const walker = this.editor.window.document.createTreeWalker(
-				block,
-				NodeFilter.SHOW_TEXT,
-				null
-			);
-			let lastText: Node | null = null;
-			while (walker.nextNode()) {
-				lastText = walker.currentNode;
-			}
-			return lastText === endContainer;
-		}
+		if (probe.collapsed) return true;
 
-		return false;
+		return isFragmentEffectivelyEmpty(probe.cloneContents());
 	}
 
 	/**
