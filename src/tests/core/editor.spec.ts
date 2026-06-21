@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HalkaEditor } from '../../lib/core/editor.js';
 import { listPlugin } from '../../lib/plugins/list.js';
+import { DEMO_CONTENT } from '../../lib/site/demo-content.js';
 
 const createRoot = () => {
 	const root = document.createElement('div');
@@ -663,6 +664,83 @@ describe('HalkaEditor', () => {
 			editor.setHTML('a\nb');
 
 			expect(editor.getHTML()).toBe('<p>a</p><p>b</p>');
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('preserves pretty-printed HTML without splitting on insignificant newlines', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML(`<p>
+	This is <strong>modern</strong> text.
+	Try <em>formatting</em> here.
+</p>
+<ul>
+	<li>Item one</li>
+	<li>Item two
+		<ul>
+			<li>Nested</li>
+		</ul>
+	</li>
+</ul>
+<table>
+	<thead>
+		<tr>
+			<th>A</th>
+			<th>B</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>1</td>
+			<td>2</td>
+		</tr>
+	</tbody>
+</table>`);
+
+			expect(root.querySelectorAll('p').length).toBe(1);
+			expect(root.querySelectorAll('ul').length).toBe(2);
+			expect(root.querySelectorAll('table').length).toBe(1);
+			expect(root.querySelectorAll('tr').length).toBe(2);
+			expect(root.textContent).toContain('This is');
+			expect(root.textContent).toContain('modern');
+			expect(root.textContent).toContain('formatting');
+			expect(root.textContent).toContain('Nested');
+			expect(root.textContent).not.toMatch(/\t/);
+
+			document.body.removeChild(root);
+			editor.destroy();
+		});
+
+		it('preserves DEMO_CONTENT structure after setHTML', () => {
+			const root = createRoot();
+			const editor = new HalkaEditor(root, { shortcuts: false });
+
+			editor.setHTML(DEMO_CONTENT);
+
+			expect(root.querySelector('h1')?.textContent).toContain('Halka Editor Demo');
+			expect(root.querySelectorAll('h2').length).toBe(1);
+			expect(root.querySelectorAll('table').length).toBe(1);
+			expect(root.querySelectorAll('ul').length).toBe(2);
+			expect(root.querySelector('[data-footnotes]')).not.toBeNull();
+			expect(root.innerHTML).not.toContain('<p></p>');
+			expect(root.querySelectorAll('thead tr').length).toBe(1);
+			expect(root.querySelectorAll('tbody tr').length).toBe(2);
+
+			const intro = root.querySelector('p');
+			expect(intro?.innerHTML).toContain('</strong> rich');
+			expect(intro?.innerHTML).toContain('Try <span');
+			expect(intro?.innerHTML).toContain('</span> (Cmd');
+
+			const formatting = root.querySelectorAll('p')[1];
+			expect(formatting?.innerHTML).toContain(', and <s>');
+
+			const links = Array.from(root.querySelectorAll('p')).find((p) =>
+				p.querySelector('a[href="https://github.com/hasinoorit/halka"]')
+			);
+			expect(links?.innerHTML).toContain('</a> —');
 
 			document.body.removeChild(root);
 			editor.destroy();

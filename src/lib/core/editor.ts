@@ -1188,10 +1188,74 @@ export class HalkaEditor extends Editor {
 			return;
 		}
 
+		this.normalizeNewlineOnlyWhitespaceTextNodes();
 		this.wrapRootLooseNodes();
 		this.splitNewlinesInBlocks();
 		this.mergeAdjacentEmptyParagraphs();
+		this.removeEmptyRootParagraphs();
 		this.removeOrphanedEmptyRootBlocks();
+	}
+
+	private normalizeNewlineOnlyWhitespaceTextNodes(): void {
+		const walker = this.window.document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
+
+		while (walker.nextNode()) {
+			const textNode = walker.currentNode as Text;
+			if (!/[\r\n]/.test(textNode.data) || textNode.data.trim() !== '') continue;
+
+			const parent = textNode.parentElement;
+			if (!parent || parent === this.root) {
+				textNode.remove();
+				continue;
+			}
+
+			textNode.data = ' ';
+		}
+	}
+
+	private isFirstSignificantTextInBlock(textNode: Text): boolean {
+		let node: ChildNode | null = textNode.previousSibling;
+		while (node) {
+			if (node.nodeType === Node.TEXT_NODE) {
+				if ((node as Text).data.trim() !== '') return false;
+			} else if (node.nodeType === Node.ELEMENT_NODE) {
+				return false;
+			}
+			node = node.previousSibling;
+		}
+		return true;
+	}
+
+	private joinPrettyPrintedLineParts(parts: string[]): string {
+		return parts[0] + parts.slice(1).map((part) => part.replace(/^\s+/, ' ')).join('');
+	}
+
+	private removeEmptyRootParagraphs(): void {
+		const isSolePlaceholder =
+			this.root.childNodes.length === 1 &&
+			isElementNode(this.root.firstChild!) &&
+			this.root.firstChild!.tagName === 'P' &&
+			isEmptyBlock(this.root.firstChild as HTMLElement);
+
+		if (isSolePlaceholder) return;
+
+		for (const child of Array.from(this.root.children)) {
+			if (!isElementNode(child) || child.tagName !== 'P') continue;
+			if (this.isOrphanEmptyParagraph(child as HTMLElement)) {
+				child.remove();
+			}
+		}
+	}
+
+	private isOrphanEmptyParagraph(element: HTMLElement): boolean {
+		if (element.querySelector('img, hr, br, sup, code, a')) {
+			return false;
+		}
+
+		const text = element.textContent ?? '';
+		if (text.includes('\u00A0')) return false;
+
+		return text.trim() === '';
 	}
 
 	private removeUnstyledSpans(scope: HTMLElement): void {
@@ -1317,9 +1381,9 @@ export class HalkaEditor extends Editor {
 
 		while (walker.nextNode()) {
 			const textNode = walker.currentNode as Text;
-			if (/[\r\n]/.test(textNode.data)) {
-				textNodesToSplit.push(textNode);
-			}
+			if (!/[\r\n]/.test(textNode.data)) continue;
+
+			textNodesToSplit.push(textNode);
 		}
 
 		for (const textNode of textNodesToSplit) {
@@ -1328,9 +1392,49 @@ export class HalkaEditor extends Editor {
 	}
 
 	private splitTextNodeIntoBlocks(textNode: Text): void {
-		const parts = textNode.data.split(/\r?\n/);
+		let parts = textNode.data.split(/\r?\n/);
+		let trimmedLeading = false;
+		let hadTrailingLineBreak = false;
+
+		while (parts.length > 1 && parts[0].trim() === '') {
+			parts.shift();
+			trimmedLeading = true;
+		}
+
+		while (parts.length > 1 && parts[parts.length - 1].trim() === '') {
+			hadTrailingLineBreak = true;
+			parts.pop();
+		}
+
+		const appendSpaceBeforeElementSibling = (value: string): string => {
+			if (
+				hadTrailingLineBreak &&
+				textNode.nextSibling?.nodeType === Node.ELEMENT_NODE &&
+				value &&
+				!/\s$/.test(value)
+			) {
+				return `${value} `;
+			}
+			return value;
+		};
+
 		if (parts.length <= 1) {
-			textNode.data = parts[0] ?? '';
+			let value = parts[0] ?? '';
+			if (trimmedLeading) {
+				value = this.isFirstSignificantTextInBlock(textNode)
+					? value.trimStart()
+					: value.replace(/^\s+/, ' ');
+			}
+			textNode.data = appendSpaceBeforeElementSibling(value);
+			return;
+		}
+
+		const shouldJoinPrettyPrintedLines =
+			parts.every((part) => part.trim() !== '') &&
+			parts.slice(1).some((part) => /^\s/.test(part));
+
+		if (shouldJoinPrettyPrintedLines) {
+			textNode.data = appendSpaceBeforeElementSibling(this.joinPrettyPrintedLineParts(parts));
 			return;
 		}
 
@@ -1340,16 +1444,17 @@ export class HalkaEditor extends Editor {
 		const tagName = block.tagName.toLowerCase();
 		const blockTag = this.schema.isBlock(tagName) ? tagName : 'p';
 
-		textNode.data = parts[0];
+		textNode.data = trimmedLeading ? parts[0].trimStart() : parts[0];
 
 		let insertAfter: Node = block;
 		for (let i = 1; i < parts.length; i++) {
-			const newBlock = this.createEl(blockTag as keyof HTMLElementTagNameMap);
-			if (parts[i]) {
-				newBlock.appendChild(this.createText(parts[i]));
-			} else {
-				newBlock.appendChild(this.createEl('br'));
+			const part = parts[i];
+			if (!part.trim()) {
+				continue;
 			}
+
+			const newBlock = this.createEl(blockTag as keyof HTMLElementTagNameMap);
+			newBlock.appendChild(this.createText(part.trimStart()));
 			insertAfter.parentNode?.insertBefore(newBlock, insertAfter.nextSibling);
 			insertAfter = newBlock;
 		}
