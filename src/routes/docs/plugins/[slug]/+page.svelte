@@ -47,6 +47,10 @@
 		{#if plugin.states?.length}
 			<section class="space-y-3">
 				<h2 class="text-xl font-semibold">State</h2>
+				<p class="text-sm text-muted-foreground">
+					Read plugin state with <code class="text-xs">editor.getState(name)</code>. Listen to
+					<code class="text-xs">formatChange</code> to refresh UI when the selection moves.
+				</p>
 				<ApiTable
 					columns={[
 						{ key: 'name', label: 'State' },
@@ -54,6 +58,22 @@
 					]}
 					rows={plugin.states.map((s) => ({ name: s.name, description: s.description }))}
 				/>
+				{#if plugin.stateExample}
+					<CodeExample language="typescript">{plugin.stateExample}</CodeExample>
+				{/if}
+			</section>
+		{/if}
+
+		{#if plugin.queryExample}
+			<section class="space-y-3">
+				<h2 class="text-xl font-semibold">Query API</h2>
+				<p class="text-sm text-muted-foreground">
+					This plugin does not register <code class="text-xs">getState</code> keys. Use the core
+					<a href="/docs/core#selection" class="text-primary underline-offset-4 hover:underline"
+						>query API</a
+					> to detect context at the caret.
+				</p>
+				<CodeExample language="typescript">{plugin.queryExample}</CodeExample>
 			</section>
 		{/if}
 

@@ -18,6 +18,17 @@ type TableGetStylesCommandPayload = {
 	callback: (styles: Record<string, string>) => void;
 };
 
+export type TableCellActiveState = {
+	tagName: 'TD' | 'TH';
+	colSpan: number;
+	rowSpan: number;
+	isMerged: boolean;
+};
+
+export type TableActiveState = {
+	cell: TableCellActiveState | null;
+};
+
 declare module '../core/editor.js' {
 	interface EditorCommandMap {
 		'table.insert': TableInsertCommandPayload;
@@ -33,6 +44,9 @@ declare module '../core/editor.js' {
 		'table.getTableStyles': TableGetStylesCommandPayload;
 		'table.mergeCells': void;
 		'table.splitCell': void;
+	}
+	interface EditorStateMap {
+		'table.active': TableActiveState | null;
 	}
 }
 
@@ -588,6 +602,32 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 		});
 	};
 
+	const getTableActiveState = (): TableActiveState | null => {
+		if (editor.query.findClosest('TABLE') === null) {
+			return null;
+		}
+
+		const cell = editor.query.matchPath(
+			(node): node is HTMLTableCellElement => node instanceof HTMLTableCellElement
+		);
+
+		if (!(cell instanceof HTMLTableCellElement)) {
+			return { cell: null };
+		}
+
+		const colSpan = cell.colSpan || 1;
+		const rowSpan = cell.rowSpan || 1;
+
+		return {
+			cell: {
+				tagName: cell.tagName as 'TD' | 'TH',
+				colSpan,
+				rowSpan,
+				isMerged: colSpan > 1 || rowSpan > 1
+			}
+		};
+	};
+
 	const commands = {
 		'table.insert': insertTable,
 		'table.addColumn': addColumn,
@@ -608,7 +648,10 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 		editor.registerCommand(name as any, handler as any);
 	});
 
+	editor.registerState('table.active', getTableActiveState);
+
 	return () => {
+		editor.unregisterState('table.active', getTableActiveState);
 		Object.keys(commands).forEach((name) => {
 			editor.unregisterCommand(name as any, (commands as any)[name]);
 		});

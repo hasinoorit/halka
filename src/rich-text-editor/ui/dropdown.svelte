@@ -8,6 +8,7 @@
 		icon?: Snippet;
 		onclick?: () => void;
 		variant?: 'default' | 'destructive';
+		disabled?: boolean;
 	}
 
 	interface Props {
@@ -66,7 +67,10 @@
 						<button
 							class="rte-dropdown-item"
 							class:rte-dropdown-item--destructive={item.variant === 'destructive'}
+							class:rte-dropdown-item--disabled={item.disabled}
+							disabled={item.disabled}
 							onclick={() => {
+								if (item.disabled) return;
 								item.onclick?.();
 								close();
 							}}
@@ -145,6 +149,13 @@
 	.rte-dropdown-item:hover {
 		background: var(--rte-accent, #f1f5f9);
 		color: var(--rte-accent-foreground, #0f172a);
+	}
+
+	.rte-dropdown-item--disabled,
+	.rte-dropdown-item--disabled:hover {
+		cursor: not-allowed;
+		opacity: 0.5;
+		background: transparent;
 	}
 
 	.rte-dropdown-item--destructive {

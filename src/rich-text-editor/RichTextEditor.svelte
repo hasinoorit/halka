@@ -35,6 +35,7 @@
 	let activeBlock = $state<string | null>(null);
 	let activeList = $state<'ul' | 'ol' | null>(null);
 	let isTableSelected = $state(false);
+	let canSplitTableCell = $state(false);
 
 	// Formatting States
 	let bold = $state(false);
@@ -102,13 +103,11 @@
 
 		imageSelected = editor.getState('image.active') !== null;
 
-		// Table detection
-		isTableSelected = editor.query.findClosest('TABLE') !== null;
+		const tableActive = editor.getState('table.active');
+		isTableSelected = tableActive !== null;
+		canSplitTableCell = tableActive?.cell?.isMerged ?? false;
 
-		const list = editor.query.matchPath(
-			(node) => node instanceof HTMLElement && (node.tagName === 'UL' || node.tagName === 'OL')
-		);
-		activeList = list instanceof HTMLElement ? (list.tagName.toLowerCase() as 'ul' | 'ol') : null;
+		activeList = editor.getState('list.active')?.type ?? null;
 
 		const block = editor.query.getCurrentBlock();
 		if (block instanceof HTMLElement) {
@@ -364,6 +363,7 @@
 			{activeBlock}
 			{activeList}
 			{isTableSelected}
+			{canSplitTableCell}
 			{bold}
 			{italic}
 			{underline}

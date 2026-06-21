@@ -9,6 +9,7 @@
 		activeBlock: string | null;
 		activeList: 'ul' | 'ol' | null;
 		isTableSelected: boolean;
+		canSplitTableCell: boolean;
 		bold: boolean;
 		italic: boolean;
 		underline: boolean;
@@ -46,6 +47,7 @@
 		activeBlock,
 		activeList,
 		isTableSelected,
+		canSplitTableCell,
 		bold,
 		italic,
 		underline,
@@ -769,6 +771,12 @@
 						icon: mergeIcon
 					},
 					{
+						label: 'Split Cell',
+						onclick: () => editor?.execCommand('table.splitCell'),
+						icon: splitIcon,
+						disabled: !canSplitTableCell
+					},
+					{
 						label: 'Delete Row',
 						onclick: () => editor?.execCommand('table.removeRow'),
 						variant: 'destructive',
@@ -891,6 +899,23 @@
 		><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 12h18" /><path
 			d="M12 3v18"
 		/></svg
+	>
+{/snippet}
+
+{#snippet splitIcon()}
+	<svg
+		xmlns="http://www.w3.org/2000/svg"
+		width="14"
+		height="14"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M12 3v18" /><path
+			d="M8 12h-2"
+		/><path d="M16 12h2" /></svg
 	>
 {/snippet}
 

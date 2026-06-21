@@ -7,6 +7,29 @@ import {
 } from '../helpers/list.js';
 import { type Editor, definePlugin } from '../core/editor.js';
 
+export type ListType = 'ul' | 'ol';
+
+export type ListActiveState = {
+	type: ListType;
+};
+
+const getListActiveState = (editor: Editor): ListActiveState | null => {
+	const list = editor.query.matchPath(
+		(node): node is HTMLElement =>
+			node instanceof HTMLElement && (node.tagName === 'UL' || node.tagName === 'OL')
+	);
+	if (!(list instanceof HTMLElement)) {
+		return null;
+	}
+	return { type: list.tagName.toLowerCase() as ListType };
+};
+
+declare module '../core/editor.js' {
+	interface EditorStateMap {
+		'list.active': ListActiveState | null;
+	}
+}
+
 const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): void => {
 	editor.runTransaction(() => {
 		const range = editor.getRange();
@@ -255,6 +278,9 @@ export const listPlugin = definePlugin({
 		'list.outdent': (editor: Editor) => {
 			outdentList(editor);
 		}
+	},
+	states: {
+		'list.active': (editor: Editor) => getListActiveState(editor)
 	},
 	shortcuts: {
 		'mod+shift+8': 'list.toggleUnordered',

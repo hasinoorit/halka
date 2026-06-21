@@ -1,10 +1,19 @@
+export type PluginStateDoc = {
+	name: string;
+	description: string;
+};
+
 export type PluginDoc = {
 	slug: string;
 	title: string;
 	description: string;
 	importPath: string;
 	commands?: { name: string; description: string }[];
-	states?: { name: string; description: string }[];
+	states?: PluginStateDoc[];
+	/** Code example for editor.getState() — shown on the plugin docs page */
+	stateExample?: string;
+	/** Code example for editor.query patterns when the plugin has no registered state */
+	queryExample?: string;
 	shortcuts?: { keys: string; action: string }[];
 	usageTips?: string[];
 	example?: string;
@@ -42,6 +51,21 @@ export const PLUGINS: PluginDoc[] = [
 			{ name: 'link.unlink', description: 'Remove link, keep text' }
 		],
 		states: [{ name: 'link.active', description: 'Active link attributes or null' }],
+		stateExample: `const link = editor.getState('link.active') as {
+  href: string;
+  target: string;
+  rel: string;
+} | null;
+
+// null when the caret is not inside a link
+if (link) {
+  console.log(link.href);
+}
+
+// Refresh when selection changes (e.g. toolbar)
+editor.on('formatChange', () => {
+  const active = editor.getState('link.active');
+});`,
 		usageTips: [
 			'Select text and call link.toggle to wrap in <a>',
 			'link.toggle with empty href removes the link',
@@ -68,10 +92,22 @@ export const PLUGINS: PluginDoc[] = [
 			{ keys: 'Mod+Shift+7', action: 'Toggle ordered list' },
 			{ keys: 'Tab / Shift+Tab', action: 'Indent / outdent' }
 		],
+		states: [{ name: 'list.active', description: 'Active list type at caret, or null' }],
+		stateExample: `const listActive = editor.getState('list.active') as {
+  type: 'ul' | 'ol';
+} | null;
+
+const isBulletList = listActive?.type === 'ul';
+const isOrderedList = listActive?.type === 'ol';
+
+editor.on('formatChange', () => {
+  const activeList = editor.getState('list.active');
+});`,
 		usageTips: [
 			'Toggle bullet or numbered list from your toolbar',
 			'Tab indents nested list items, Shift+Tab outdents',
-			'Combine with markdown-shortcuts plugin: type "- " or "1. " + Space'
+			'Combine with markdown-shortcuts plugin: type "- " or "1. " + Space',
+			'Read list.active on formatChange to highlight list toolbar buttons'
 		],
 		example: `editor.execCommand('list.toggleUnordered');
 editor.execCommand('list.indent');
@@ -98,6 +134,21 @@ editor.execCommand('list.outdent');`
 				description: '{ src, alt, title, layout: "inline" | "block", style } or null'
 			}
 		],
+		stateExample: `const image = editor.getState('image.active') as {
+  src: string;
+  alt: string;
+  title: string;
+  layout: 'inline' | 'block';
+  style: { display: string; width: string; height: string; maxWidth: string };
+} | null;
+
+// null when the caret is in text; set when an <img> is selected
+const imageSelected = image !== null;
+const canEditLayout = image?.layout;
+
+editor.on('formatChange', () => {
+  const active = editor.getState('image.active');
+});`,
 		usageTips: [
 			'Click an image to select it, then use the toolbar image button to edit',
 			'layout: "inline" places the image inside the current paragraph (like text flow)',
@@ -139,15 +190,33 @@ const layout = inferImageLayout(imgElement, editor.root);`,
 			{ name: 'table.mergeCells / table.splitCell', description: 'Merge or split cells' },
 			{ name: 'table.styleCell / table.styleRow / table.styleTable', description: 'Apply CSS' }
 		],
+		states: [{ name: 'table.active', description: 'Table context at caret, or null' }],
+		stateExample: `const tableActive = editor.getState('table.active') as {
+  cell: {
+    tagName: 'TD' | 'TH';
+    colSpan: number;
+    rowSpan: number;
+    isMerged: boolean;
+  } | null;
+} | null;
+
+const inTable = tableActive !== null;
+const canSplitCell = tableActive?.cell?.isMerged ?? false;
+
+editor.on('formatChange', () => {
+  const active = editor.getState('table.active');
+});`,
 		usageTips: [
 			'Insert table with row/column count and optional header row',
 			'Add/remove rows and columns when cursor is in a cell',
-			'Merge and split cells with multi-cell selection',
-			'Delete table when the table element is selected'
+			'Merge cells with multi-cell selection; split only works on merged cells',
+			'Read table.active on formatChange to drive table toolbar (split when cell.isMerged)'
 		],
 		example: `editor.execCommand('table.insert', {
   rows: 3, columns: 4, header: true
-});`
+});`,
+		notes:
+			'Split cell only affects merged cells (colSpan or rowSpan > 1). table.active.cell is null when the caret is in a table but not inside a cell.'
 	},
 	{
 		slug: 'footnote',
@@ -160,6 +229,19 @@ const layout = inferImageLayout(imgElement, editor.root);`,
 			{ name: 'footnote.editItem / footnote.removeItem', description: 'Edit or remove' }
 		],
 		states: [{ name: 'footnote.items', description: 'Array of { id, content }' }],
+		stateExample: `const items = editor.getState('footnote.items') as {
+  id: string;
+  content: string;
+}[];
+
+// Build a footnote manager UI from items
+for (const item of items) {
+  console.log(item.id, item.content);
+}
+
+editor.on('formatChange', () => {
+  const footnotes = editor.getState('footnote.items');
+});`,
 		usageTips: [
 			'Add footnote bodies with footnote.addItem',
 			'Insert citation at cursor — auto-numbered superscript',
@@ -219,6 +301,25 @@ editor.execCommand('footnote.insertCitation', items[0].id);`
 			{ name: 'findReplace.replace / replaceAll', description: 'Replace matches' }
 		],
 		states: [{ name: 'findReplace.state', description: 'Query, match count, current index' }],
+		stateExample: `const findState = editor.getState('findReplace.state') as {
+  isOpen: boolean;
+  query: string;
+  replacement: string;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+  matchCount: number;
+  currentIndex: number;
+  currentMatch: { start: number; end: number } | null;
+};
+
+// Drive a find/replace panel from state
+if (findState.isOpen) {
+  console.log(\`Match \${findState.currentIndex + 1} of \${findState.matchCount}\`);
+}
+
+editor.on('formatChange', () => {
+  const state = editor.getState('findReplace.state');
+});`,
 		shortcuts: [
 			{ keys: 'Mod+F', action: 'Open find' },
 			{ keys: 'Mod+H', action: 'Open find & replace' }

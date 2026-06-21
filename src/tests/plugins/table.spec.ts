@@ -840,4 +840,71 @@ describe('tablePlugin', () => {
 		document.body.removeChild(root);
 		editor.destroy();
 	});
+
+	it('returns table.active with cell info when caret is in a cell', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false, plugins: [tablePlugin] });
+
+		editor.setHTML(
+			'<table><tbody><tr><td>one</td><td colspan="2" rowspan="2">merged</td></tr><tr><td>two</td></tr></tbody></table>'
+		);
+		const merged = root.querySelector('td[colspan="2"]') as HTMLTableCellElement;
+		const range = document.createRange();
+		range.selectNodeContents(merged);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		expect(editor.getState('table.active')).toEqual({
+			cell: {
+				tagName: 'TD',
+				colSpan: 2,
+				rowSpan: 2,
+				isMerged: true
+			}
+		});
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('returns table.active with isMerged false for a normal cell', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false, plugins: [tablePlugin] });
+
+		editor.setHTML('<table><tbody><tr><td>one</td></tr></tbody></table>');
+		const cell = root.querySelector('td') as HTMLTableCellElement;
+		const range = document.createRange();
+		range.selectNodeContents(cell);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		expect(editor.getState('table.active')).toEqual({
+			cell: {
+				tagName: 'TD',
+				colSpan: 1,
+				rowSpan: 1,
+				isMerged: false
+			}
+		});
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('returns null for table.active outside a table', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false, plugins: [tablePlugin] });
+
+		editor.setHTML('<p>plain text</p>');
+		const p = root.querySelector('p') as HTMLElement;
+		const range = document.createRange();
+		range.selectNodeContents(p);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		expect(editor.getState('table.active')).toBeNull();
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
 });
