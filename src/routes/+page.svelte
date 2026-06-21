@@ -22,9 +22,20 @@
 			<li>Links and Images</li>
 			<li>Tables with advanced controls</li>
 			<li>Custom text and background colors</li>
+			<li>Find and replace with match highlighting</li>
+			<li>Clear formatting and clear styles as separate actions</li>
 		</ul>
 
 		<blockquote>"Simplicity is the ultimate sophistication." - Leonardo da Vinci</blockquote>
+
+		<p>
+			Try <span style="color: #e11d48; font-size: 20px"><strong><em>Find &amp; Replace</em></strong></span>
+			(Cmd/Ctrl+F) to search for <strong>editor</strong> — the word appears several times in this
+			demo. Use the clear-formatting button to remove bold/italic tags, or the eraser button to
+			remove colors, font sizes, and other inline styles.
+		</p>
+
+		<p>The editor is easy to extend. The editor plugin system keeps the core small.</p>
 
 		<p>Try editing this content to see the editor in action!</p>
 	`);
@@ -68,5 +79,32 @@
 			</div>
 		</div>
 		<RichTextEditor placeholder="Write something..." bind:content={editorContent} />
+
+		<section class="rounded-lg border border-border bg-card p-5 text-card-foreground">
+			<h2 class="text-lg font-semibold">Usage</h2>
+			<p class="mt-1 text-sm text-muted-foreground">
+				Open find &amp; replace from the toolbar or with Cmd/Ctrl+F. Use clear formatting to remove
+				bold/italic tags, or clear styles to remove colors, fonts, and alignment.
+			</p>
+			<pre class="mt-3 overflow-x-auto rounded-md bg-muted p-4 text-sm"><code
+					>import &#123; findReplacePlugin &#125; from 'halka/plugins/find-replace';
+
+// Register the plugin
+const editor = new HalkaEditor(element, &#123;
+  plugins: [findReplacePlugin]
+&#125;);
+
+// Find &amp; replace
+editor.execCommand('findReplace.open', &#123; query: 'editor' &#125;);
+editor.execCommand('findReplace.findNext');
+editor.execCommand('findReplace.replaceAll');
+
+// Clear semantic formatting (strong, em, etc.)
+editor.transforms.clearFormatting();
+
+// Clear inline styles (color, font-size, text-align, etc.)
+editor.clearStyles();</code
+				></pre>
+		</section>
 	</div>
 </div>

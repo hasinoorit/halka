@@ -34,7 +34,9 @@
 		onInsertImage: () => void;
 		onInsertTable: () => void;
 		onInsertFootnote: () => void;
+		onOpenFindReplace: () => void;
 		onClearFormatting: () => void;
+		onClearStyles: () => void;
 		onDeleteTable: () => void;
 	}
 
@@ -68,7 +70,9 @@
 		onInsertImage,
 		onInsertTable,
 		onInsertFootnote,
+		onOpenFindReplace,
 		onClearFormatting,
+		onClearStyles,
 		onDeleteTable
 	}: Props = $props();
 </script>
@@ -102,6 +106,26 @@
 				stroke-linecap="round"
 				stroke-linejoin="round"
 				><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 3.7" /></svg
+			>
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon"
+			className="rte-btn--icon"
+			onclick={onOpenFindReplace}
+			title="Find and Replace (Ctrl+F)"
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg
 			>
 		</Button>
 	</div>
@@ -314,6 +338,52 @@
 				stroke-linecap="round"
 				stroke-linejoin="round"
 				><path d="m4 19 6-6" /><path d="m4 13 6 6" /><path d="M16 9V5a2 2 0 0 1 2-2h2" /></svg
+			>
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon"
+			className="rte-btn--icon"
+			onmousedown={(e) => e.preventDefault()}
+			onclick={onClearFormatting}
+			title="Clear formatting"
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				><path d="M4 7V4h16v3" /><path d="M5 20h6" /><path d="m9 20 5-12" /><path
+					d="m15.5 11.5 3 3L22 11l-3-3"
+				/></svg
+			>
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon"
+			className="rte-btn--icon"
+			onmousedown={(e) => e.preventDefault()}
+			onclick={onClearStyles}
+			title="Clear styles"
+		>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path
+					d="M22 21H7"
+				/></svg
 			>
 		</Button>
 	</div>
@@ -711,35 +781,6 @@
 				]}
 			/>
 		{/if}
-	</div>
-
-	<!-- Clear Formatting -->
-	<div class="rte-toolbar-group rte-toolbar-group--end">
-		<Button
-			variant="ghost"
-			size="icon"
-			className="rte-btn--icon"
-			onclick={onClearFormatting}
-			title="Clear Formatting"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="16"
-				height="16"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				><path d="M18 6 7 17l-5-5" /><path d="m22 10-7.5 7.5L13 16" /><line
-					x1="8"
-					y1="21"
-					x2="22"
-					y2="21"
-				/></svg
-			>
-		</Button>
 	</div>
 </div>
 

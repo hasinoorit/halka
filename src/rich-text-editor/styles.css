@@ -50,6 +50,9 @@
 	}
 }
 
+/* Find & replace match highlight */
+
+
 /* Layout */
 .rich-text-editor {
 	color: var(--rte-foreground);

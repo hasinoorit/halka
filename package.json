@@ -80,6 +80,11 @@
 			"types": "./dist/plugins/placeholder.d.ts",
 			"import": "./dist/plugins/placeholder.js",
 			"default": "./dist/plugins/placeholder.js"
+		},
+		"./plugins/find-replace": {
+			"types": "./dist/plugins/find-replace.d.ts",
+			"import": "./dist/plugins/find-replace.js",
+			"default": "./dist/plugins/find-replace.js"
 		}
 	},
 	"peerDependencies": {

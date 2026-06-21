@@ -3,10 +3,14 @@
 	import { HalkaEditor } from '$lib/core/editor.js';
 	import { listPlugin } from '$lib/plugins/list.js';
 	import { tablePlugin } from '$lib/plugins/table.js';
+	import { findReplacePlugin } from '$lib/plugins/find-replace.js';
+	import FindReplace from '../rich-text-editor/FindReplace.svelte';
+	import '../rich-text-editor/styles.css';
 	import Button from './ui/button.svelte';
 
 	let editor: HalkaEditor | null = $state(null);
 	let editorElement: HTMLDivElement | null = $state(null);
+	let showFindReplace = $state(false);
 	let content = $state(`
 		<h2>Welcome to HalkaEditor</h2>
 		<p>This is a <strong>modern</strong> rich text editor with:</p>
@@ -22,7 +26,7 @@
 	onMount(() => {
 		if (editorElement) {
 			editor = new HalkaEditor(editorElement, {
-				plugins: [listPlugin, tablePlugin]
+				plugins: [listPlugin, tablePlugin, findReplacePlugin]
 			});
 			editor.setHTML(content);
 		}
@@ -53,6 +57,24 @@
 	function insertList() {
 		editor?.execCommand('list.toggleUnordered');
 	}
+
+	function openFindReplace() {
+		editor?.execCommand('findReplace.open');
+		showFindReplace = true;
+	}
+
+	function closeFindReplace() {
+		editor?.execCommand('findReplace.close');
+		showFindReplace = false;
+	}
+
+	function clearFormatting() {
+		editor?.transforms.clearFormatting();
+	}
+
+	function clearStyles() {
+		editor?.clearStyles();
+	}
 </script>
 
 <div class="space-y-4">
@@ -74,6 +96,18 @@
 		</Button>
 
 		<Button size="sm" onclick={insertList}>• List</Button>
+
+		<Button size="sm" onclick={openFindReplace} title="Find and Replace (Ctrl+F)">
+			Find
+		</Button>
+
+		<Button size="sm" onclick={clearFormatting} title="Clear formatting">
+			<span class="line-through">T</span>
+		</Button>
+
+		<Button size="sm" onclick={clearStyles} title="Clear styles">
+			Eraser
+		</Button>
 	</div>
 
 	<div
@@ -82,7 +116,10 @@
 		style="resize: vertical; overflow: auto"
 	></div>
 
+	<FindReplace {editor} bind:open={showFindReplace} onClose={closeFindReplace} />
+
 	<div class="text-xs text-muted-foreground">
-		Tip: Select text and use the toolbar buttons to format content
+		Tip: Select text and use the toolbar buttons to format content. Press Cmd/Ctrl+F to find text, or
+		use Clear formatting to remove styles from a selection or block.
 	</div>
 </div>

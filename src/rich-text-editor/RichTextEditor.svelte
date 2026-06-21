@@ -11,10 +11,12 @@
 	import { tablePlugin } from 'halka/plugins/table';
 	import { footnotePlugin } from 'halka/plugins/footnote';
 	import { markdownShortcutsPlugin } from 'halka/plugins/markdown-shortcuts';
+	import { findReplacePlugin } from 'halka/plugins/find-replace';
 	import Button from './ui/button.svelte';
 	import Card from './ui/card.svelte';
 	import CardContent from './ui/card-content.svelte';
 	import Dialog from './ui/dialog.svelte';
+	import FindReplace from './FindReplace.svelte';
 	import FootnoteManager from './FootnoteManager.svelte';
 	import Toolbar from './Toolbar.svelte';
 
@@ -62,6 +64,7 @@
 	let tableCols = $state(3);
 	let tableHeader = $state(true);
 	let showFootnoteModal = $state(false);
+	let showFindReplace = $state(false);
 
 	function rgbToHex(input: string): string | null {
 		const s = input.trim().toLowerCase();
@@ -122,6 +125,7 @@
 					imagePlugin,
 					tablePlugin,
 					footnotePlugin,
+					findReplacePlugin,
 					markdownShortcutsPlugin,
 					...(placeholder ? [placeholderPlugin(placeholder)] : [])
 				]
@@ -208,16 +212,23 @@
 		showFootnoteModal = true;
 	}
 
+	function openFindReplace() {
+		if (!editor) return;
+		editor.execCommand('findReplace.open');
+		showFindReplace = true;
+	}
+
+	function closeFindReplace() {
+		editor?.execCommand('findReplace.close');
+		showFindReplace = false;
+	}
+
 	function clearFormatting() {
-		const ed = editor;
-		if (!ed) return;
-		['STRONG', 'EM', 'U', 'S', 'CODE', 'SUB', 'SUP'].forEach((tag) => {
-			if (ed.query.isActive(tag)) ed.transforms.toggleMark(tag);
-		});
-		['color', 'background-color', 'font-size', 'font-family'].forEach((style) => {
-			ed.setInlineStyle(style);
-		});
-		ed.setBlockStyle('text-align');
+		editor?.transforms.clearFormatting();
+	}
+
+	function clearStyles() {
+		editor?.clearStyles();
 	}
 
 	function setStyle(property: string, value?: string) {
@@ -320,9 +331,13 @@
 			onInsertImage={insertImage}
 			onInsertTable={insertTable}
 			onInsertFootnote={insertFootnote}
+			onOpenFindReplace={openFindReplace}
 			onClearFormatting={clearFormatting}
+			onClearStyles={clearStyles}
 			onDeleteTable={deleteTable}
 		/>
+
+		<FindReplace {editor} bind:open={showFindReplace} onClose={closeFindReplace} />
 
 		<!-- Editor Area -->
 		<div

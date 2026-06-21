@@ -1,4 +1,5 @@
 import { Range as RangeHelpers, Node as NodeHelpers, isElementNode } from '../helpers/index.js';
+import { isInsideReadonly } from '../helpers/node.js';
 import { isEmptyBlock } from '../helpers/block.js';
 import { Schema } from './schema.js';
 import { Query } from './query.js';
@@ -200,6 +201,7 @@ export abstract class Editor {
 	abstract setSelection(range: Range): void;
 	abstract setInlineStyle(style: string, value?: string): void;
 	abstract setBlockStyle(style: string, value?: string): void;
+	abstract clearStyles(): void;
 	abstract toggleInlineFormat(format: string): void;
 	abstract toggleBlockFormat(format: string): void;
 	abstract normalizeSelection(): void;
@@ -634,6 +636,47 @@ export class HalkaEditor extends Editor {
 			}
 			});
 		});
+	}
+
+	clearStyles(): void {
+		this.runTransaction(() => {
+			this.selection.preserveSelection(() => {
+				const scope = this.getSelectionRoot(this.getRange());
+				if (!scope) return;
+
+				const styledElements = scope.querySelectorAll('[style]');
+				for (const element of styledElements) {
+					if (!(element instanceof HTMLElement) || isInsideReadonly(element)) continue;
+					element.removeAttribute('style');
+				}
+
+				if (!isInsideReadonly(scope) && scope.hasAttribute('style')) {
+					scope.removeAttribute('style');
+				}
+
+				this.removeUnstyledSpans(scope);
+				this.normalizeHTML();
+			});
+		});
+	}
+
+	private getSelectionRoot(range: Range): HTMLElement | null {
+		if (range.collapsed) {
+			const block =
+				this.query.getCurrentBlock() ??
+				NodeHelpers.getClosestBlockElement(range.startContainer, this.root);
+			if (block instanceof HTMLElement && block !== this.root) {
+				return block;
+			}
+			return this.inline ? this.root : null;
+		}
+
+		const ancestor = range.commonAncestorContainer;
+		if (isElementNode(ancestor)) {
+			return ancestor as HTMLElement;
+		}
+
+		return ancestor.parentElement;
 	}
 
 	toggleInlineFormat(format: string): void {
@@ -1149,6 +1192,21 @@ export class HalkaEditor extends Editor {
 		this.splitNewlinesInBlocks();
 		this.mergeAdjacentEmptyParagraphs();
 		this.removeOrphanedEmptyRootBlocks();
+	}
+
+	private removeUnstyledSpans(scope: HTMLElement): void {
+		const spans = Array.from(scope.querySelectorAll('span'));
+		for (let i = spans.length - 1; i >= 0; i--) {
+			const span = spans[i];
+			if (!span.parentNode || isInsideReadonly(span)) continue;
+
+			const style = span.getAttribute('style');
+			if (!style || style.trim() === '') {
+				NodeHelpers.unwrap(span);
+			}
+		}
+
+		NodeHelpers.mergeAdjacentChildren(scope);
 	}
 
 	private normalizeInlineHTML(): void {

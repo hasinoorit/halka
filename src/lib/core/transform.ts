@@ -1,5 +1,5 @@
 import type { Editor } from './editor.js';
-import { Range as RangeHelpers } from '../helpers/index.js';
+import { Range as RangeHelpers, clearFormatting } from '../helpers/index.js';
 
 /**
  * Transform API for mutating editor state
@@ -143,6 +143,40 @@ export class Transform {
 	 */
 	collapseToStart(): this {
 		this.editor.selection.collapseToStart();
+		return this;
+	}
+
+	/**
+	 * Remove semantic formatting tags from the selection or current block.
+	 */
+	clearFormatting(): this {
+		this.editor.runTransaction(() => {
+			const offsets = this.editor.getSelectionOffsets();
+			this.editor.selection.preserveSelection(() => {
+				clearFormatting({
+					root: this.editor.root,
+					range: this.editor.getRange(),
+					isBlock: (tagName) => this.editor.schema.isBlock(tagName)
+				});
+			});
+			this.editor.clearPendingFormats();
+			if (offsets && this.editor.window.getSelection()) {
+				RangeHelpers.restoreSelectionByOffsets(
+					this.editor.window.getSelection()!,
+					this.editor.root,
+					offsets.start,
+					offsets.end
+				);
+			}
+		});
+		return this;
+	}
+
+	/**
+	 * Remove inline style attributes from the selection or current block.
+	 */
+	clearStyles(): this {
+		this.editor.clearStyles();
 		return this;
 	}
 
