@@ -363,3 +363,8 @@
 	white-space: nowrap;
 	border: 0;
 }
+[data-footnote-list] a {
+	text-decoration: underline;
+	color: var(--rte-primary);
+	opacity: 0.6;
+}

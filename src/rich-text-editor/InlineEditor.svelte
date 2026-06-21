@@ -44,7 +44,7 @@
 		if (editorElement) {
 			editor = new HalkaEditor(editorElement, {
 				inline: true,
-				plugins: [linkPlugin, placeholderPlugin('')],
+				plugins: [linkPlugin, placeholderPlugin('Write something here...')],
 				shortcuts: true
 			});
 			editor.onShortcut('enter', (e: KeyboardEvent) => {
@@ -139,18 +139,6 @@
 			<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3" /><line x1="4" y1="21" x2="20" y2="21" /></svg>
 		</Button>
 		<div class="rte-divider"></div>
-		<ColorPicker
-			bind:value={color}
-			className="rte-btn--icon-sm"
-			onSelectColor={(c) => setStyle('color', c)}
-			onClearColor={() => setStyle('color')}
-		>
-			<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none">
-				<path d="M6 18L10.8 6h2.4L18 18h-2.2l-1.2-3.5H9.4L8.2 18H6zm4.1-5.5h3.8L12 7.8l-1.9 4.7z" fill="currentColor" />
-				<rect x="4" y="20" width="16" height="3" rx="0.5" fill={color} />
-			</svg>
-		</ColorPicker>
-		<div class="rte-divider"></div>
 		<Button
 			variant={link ? 'secondary' : 'ghost'}
 			size="icon"
@@ -184,6 +172,4 @@
 	</div>
 
 	<div use:attachEditorElement class="rte-inline-editor-content"></div>
-	<h1>Preview</h1>
-	<div>{@html value}</div>
 </div>

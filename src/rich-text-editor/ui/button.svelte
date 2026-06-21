@@ -131,7 +131,7 @@
 	:global(.rte-btn--icon-sm) {
 		height: 1.75rem;
 		width: 1.75rem;
-		padding: 0;
+		padding: 0 !important;
 	}
 
 	:global(.rte-btn--destructive-text) {

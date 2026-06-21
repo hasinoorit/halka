@@ -61,9 +61,6 @@ export const DEMO_CONTENT = `
 <p>Type markdown shortcuts: <code># </code> for headings, <code>&gt; </code> for quotes, <code>- </code> for lists.</p>
 
 <p>The editor plugin system keeps the core small<sup data-footnote-id="demo-fn-1"></sup>. Try editing this content!</p>
-<div data-footnotes>
-	<div data-footnote-id="demo-fn-1" data-footnote-number="1">
-		<p>Footnotes are managed from the toolbar. Citations auto-number when inserted.</p>
-	</div>
-</div>
+<p>Footnotes are managed from the toolbar. Citations auto-number when inserted.<sup id="citation-fn-0q6s3mokm" data-footnote-citation="fn-69qqry32f" contenteditable="false"><a href="#fn-69qqry32f" style="text-decoration: none; color: inherit;">[1]</a></sup></p>
+<ol data-footnote-list="true" data-protected="true" contenteditable="false"><li id="fn-69qqry32f" data-footnote-item-id="fn-69qqry32f"><span data-footnote-backlinks="true" contenteditable="false" style="margin-right: 8px; font-size: 0.8em;"><a href="#citation-fn-uxz7jxxna" style="text-decoration: none; color: inherit; opacity: 0.6;"> [⇧]</a></span><a href="/docs/plugins/footnote">Halka Doc</a></li></ol>
 `.trim();
