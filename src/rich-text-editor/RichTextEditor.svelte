@@ -46,6 +46,7 @@
 	let sup = $state(false);
 
 	let link = $state(false);
+	let imageSelected = $state(false);
 
 	// Style States
 	let color = $state('#000000');
@@ -59,6 +60,12 @@
 	let linkUrl = $state('');
 	let showImageModal = $state(false);
 	let imageUrl = $state('');
+	let imageAlt = $state('');
+	let imageLayout = $state<'inline' | 'block'>('inline');
+	let imageWidth = $state('');
+	let imageHeight = $state('');
+	let imageMaxWidth = $state('');
+	let imageEditing = $state(false);
 	let showTableModal = $state(false);
 	let tableRows = $state(3);
 	let tableCols = $state(3);
@@ -92,6 +99,8 @@
 		sub = editor.query.isActive('SUB');
 		sup = editor.query.isActive('SUP');
 		link = editor.query.isActive('A');
+
+		imageSelected = editor.getState('image.active') !== null;
 
 		// Table detection
 		isTableSelected = editor.query.findClosest('TABLE') !== null;
@@ -170,8 +179,47 @@
 		showLinkModal = true;
 	}
 
+	function resetImageForm() {
+		imageUrl = '';
+		imageAlt = '';
+		imageLayout = 'inline';
+		imageWidth = '';
+		imageHeight = '';
+		imageMaxWidth = '';
+		imageEditing = false;
+	}
+
+	function imageStylePayload() {
+		return {
+			width: imageWidth,
+			height: imageHeight,
+			maxWidth: imageMaxWidth
+		};
+	}
+
 	function insertImage() {
 		if (!editor) return;
+		const active = editor.getState('image.active') as {
+			src?: string;
+			alt?: string;
+			layout?: 'inline' | 'block';
+			style?: {
+				width?: string;
+				height?: string;
+				maxWidth?: string;
+			};
+		} | null;
+		if (active) {
+			imageUrl = active.src || '';
+			imageAlt = active.alt || '';
+			imageLayout = active.layout || 'inline';
+			imageWidth = active.style?.width || '';
+			imageHeight = active.style?.height || '';
+			imageMaxWidth = active.style?.maxWidth || '';
+			imageEditing = true;
+		} else {
+			resetImageForm();
+		}
 		showImageModal = true;
 	}
 
@@ -190,8 +238,18 @@
 
 	function handleImageSubmit() {
 		if (imageUrl && editor) {
-			editor.execCommand('image.insert', { src: imageUrl });
-			imageUrl = '';
+			const payload = {
+				src: imageUrl,
+				alt: imageAlt,
+				layout: imageLayout,
+				style: imageStylePayload()
+			};
+			if (imageEditing) {
+				editor.execCommand('image.update', payload);
+			} else {
+				editor.execCommand('image.insert', payload);
+			}
+			resetImageForm();
 			showImageModal = false;
 		}
 	}
@@ -314,6 +372,7 @@
 			{sub}
 			{sup}
 			{link}
+			{imageSelected}
 			{color}
 			{backgroundColor}
 			{fontSize}
@@ -375,9 +434,14 @@
 
 <Dialog
 	open={showImageModal}
-	title="Insert Image"
-	description="Enter the URL for the image."
-	onClose={() => (showImageModal = false)}
+	title={imageEditing ? 'Edit Image' : 'Insert Image'}
+	description={imageEditing
+		? 'Update the image URL, alt text, layout, and optional sizing.'
+		: 'Enter the image URL, choose inline or block layout, and optional sizing.'}
+	onClose={() => {
+		showImageModal = false;
+		resetImageForm();
+	}}
 	footer={imageModalFooter}
 >
 	<div class="rte-form-stack">
@@ -390,6 +454,56 @@
 				class="rte-input"
 				bind:value={imageUrl}
 				onkeydown={(e) => e.key === 'Enter' && handleImageSubmit()}
+			/>
+		</div>
+		<div class="rte-form-field">
+			<label for="image-alt" class="rte-label">Alt text</label>
+			<input
+				id="image-alt"
+				type="text"
+				placeholder="Describe the image"
+				class="rte-input"
+				bind:value={imageAlt}
+				onkeydown={(e) => e.key === 'Enter' && handleImageSubmit()}
+			/>
+		</div>
+		<div class="rte-form-field">
+			<label for="image-layout" class="rte-label">Layout</label>
+			<select id="image-layout" class="rte-input" bind:value={imageLayout}>
+				<option value="inline">Inline in text</option>
+				<option value="block">Block (own line)</option>
+			</select>
+		</div>
+		<div class="rte-form-grid">
+			<div class="rte-form-field">
+				<label for="image-width" class="rte-label">Width</label>
+				<input
+					id="image-width"
+					type="text"
+					placeholder="e.g. 300px, 50%"
+					class="rte-input"
+					bind:value={imageWidth}
+				/>
+			</div>
+			<div class="rte-form-field">
+				<label for="image-height" class="rte-label">Height</label>
+				<input
+					id="image-height"
+					type="text"
+					placeholder="e.g. 200px, auto"
+					class="rte-input"
+					bind:value={imageHeight}
+				/>
+			</div>
+		</div>
+		<div class="rte-form-field">
+			<label for="image-max-width" class="rte-label">Max width</label>
+			<input
+				id="image-max-width"
+				type="text"
+				placeholder="e.g. 100%"
+				class="rte-input"
+				bind:value={imageMaxWidth}
 			/>
 		</div>
 	</div>
@@ -449,8 +563,14 @@
 {/snippet}
 
 {#snippet imageModalFooter()}
-	<Button variant="outline" onclick={() => (showImageModal = false)}>Cancel</Button>
-	<Button onclick={handleImageSubmit}>Insert</Button>
+	<Button
+		variant="outline"
+		onclick={() => {
+			showImageModal = false;
+			resetImageForm();
+		}}>Cancel</Button
+	>
+	<Button onclick={handleImageSubmit}>{imageEditing ? 'Update' : 'Insert'}</Button>
 {/snippet}
 
 {#snippet tableModalFooter()}

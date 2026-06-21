@@ -48,7 +48,8 @@ export const defaultSchema: SchemaSpec = {
 		'SUP',
 		'S',
 		'STRIKE',
-		'SMALL'
+		'SMALL',
+		'IMG'
 	]),
 	voids: new Set(['IMG', 'BR', 'HR', 'INPUT'])
 };

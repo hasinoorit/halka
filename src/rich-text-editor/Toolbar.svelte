@@ -17,6 +17,7 @@
 		sub: boolean;
 		sup: boolean;
 		link: boolean;
+		imageSelected: boolean;
 		color: string;
 		backgroundColor: string;
 		fontSize: string;
@@ -53,6 +54,7 @@
 		sub,
 		sup,
 		link,
+		imageSelected,
 		color,
 		backgroundColor,
 		fontSize,
@@ -669,7 +671,13 @@
 				/></svg
 			>
 		</Button>
-		<Button variant="ghost" size="icon" className="rte-btn--icon" onclick={onInsertImage} title="Image">
+		<Button
+			variant={imageSelected ? 'secondary' : 'ghost'}
+			size="icon"
+			className="rte-btn--icon"
+			onclick={onInsertImage}
+			title={imageSelected ? 'Edit Image' : 'Image'}
+		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				width="16"
