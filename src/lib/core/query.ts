@@ -66,15 +66,17 @@ export class Query {
 	 * Check if a format (tag) is active at the current selection
 	 */
 	isActive(tagName: string): boolean {
-		// If selection is collapsed, check pending formats first
 		const range = this.editor.getRange();
+		const tagUpper = tagName.toUpperCase();
 		if (range.collapsed) {
 			const pending = this.editor.getPendingFormats();
-			// If we have pending formats, trust them (state based)
-			if (pending.size > 0) {
-				return pending.has(tagName.toUpperCase());
+			if (pending.has(tagUpper)) {
+				return true;
 			}
-			// Otherwise fallback to DOM check
+			const suppressed = this.editor.getSuppressedFormats();
+			if (suppressed.has(tagUpper)) {
+				return false;
+			}
 		}
 		return this.findClosest(tagName) !== null;
 	}

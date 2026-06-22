@@ -57,8 +57,9 @@ new HalkaEditor(root: HTMLElement, options?: &#123;
 			]}
 		/>
 		<ul class="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-			<li>Collapsed cursor inside a format + toggle removes the whole wrapping element</li>
-			<li>Collapsed cursor outside a format sets a pending format — next typed character is wrapped</li>
+			<li>Collapsed cursor inside a format + toggle turns format off for the next typed characters only (existing text is unchanged)</li>
+			<li>Collapsed cursor outside a format sets a pending format — typed characters stay wrapped until toggled off</li>
+			<li>No zero-width spaces or empty tags on toggle; DOM updates when you type</li>
 			<li>Built-in shortcuts: Mod+B (bold), Mod+I (italic), Mod+U (underline)</li>
 		</ul>
 		<CodeExample>
@@ -84,6 +85,8 @@ editor.transforms.clearFormatting();
 		/>
 		<ul class="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
 			<li>If a span already wraps the selection, inline style is updated in place</li>
+			<li>Collapsed caret with font-size or font-family sets a pending style — typed text is wrapped in a styled span</li>
+			<li>Color and background-color at a collapsed caret apply to the current block (not pending)</li>
 			<li>Removing the only style on a span unwraps it entirely</li>
 		</ul>
 		<CodeExample>

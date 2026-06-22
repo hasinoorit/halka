@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { HalkaEditor } from '../../lib/core/editor.js';
+import { Range as RangeHelpers } from '../../lib/helpers/index.js';
 import { listPlugin } from '../../lib/plugins/list.js';
 import { DEMO_CONTENT } from '../../lib/site/demo-content.js';
 
@@ -265,6 +266,84 @@ describe('HalkaEditor', () => {
 		expect(root.querySelector('span')).toBeNull();
 		expect(root.querySelector('p')!.style.getPropertyValue('color')).toBe('red');
 		expect(root.textContent).toBe('hello');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('applies pending font-size when typing multiple characters', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p>test</p>');
+		const text = root.querySelector('p')!.firstChild as Text;
+
+		const range = document.createRange();
+		range.setStart(text, 4);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		editor.setInlineStyle('font-size', '20px');
+		expect(editor.getPendingStyles().get('font-size')).toBe('20px');
+		expect(root.querySelector('span')).toBeNull();
+
+		for (const char of 'abc') {
+			root.dispatchEvent(
+				new InputEvent('beforeinput', {
+					inputType: 'insertText',
+					data: char,
+					bubbles: true,
+					cancelable: true
+				})
+			);
+		}
+
+		const span = root.querySelector('span');
+		expect(span).not.toBeNull();
+		expect(span!.style.getPropertyValue('font-size')).toBe('20px');
+		expect(span!.textContent).toBe('a');
+		expect(root.innerHTML).not.toContain('\u200B');
+
+		editor.insertText('bc');
+		expect(span!.textContent).toBe('abc');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('keeps typed text inside a styled span after surround', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p>hello</p>');
+		const text = root.querySelector('p')!.firstChild as Text;
+
+		const range = document.createRange();
+		range.setStart(text, 5);
+		range.setEnd(text, 5);
+		editor.setSelection(range);
+
+		editor.runTransaction(() => {
+			const span = editor.createEl('span');
+			span.style.setProperty('color', 'red');
+			RangeHelpers.surround(span, editor.window);
+		});
+
+		root.dispatchEvent(
+			new InputEvent('beforeinput', {
+				inputType: 'insertText',
+				data: 'a',
+				bubbles: true,
+				cancelable: true
+			})
+		);
+
+		editor.insertText('bc');
+
+		const span = root.querySelector('span');
+		expect(span).not.toBeNull();
+		expect(span!.textContent).toBe('abc');
+		expect(root.innerHTML).not.toContain('\u200B');
 
 		document.body.removeChild(root);
 		editor.destroy();
@@ -724,7 +803,7 @@ describe('HalkaEditor', () => {
 			expect(root.querySelectorAll('h2').length).toBe(1);
 			expect(root.querySelectorAll('table').length).toBe(1);
 			expect(root.querySelectorAll('ul').length).toBe(2);
-			expect(root.querySelector('[data-footnotes]')).not.toBeNull();
+			expect(root.querySelector('[data-footnote-list]')).not.toBeNull();
 			expect(root.innerHTML).not.toContain('<p></p>');
 			expect(root.querySelectorAll('thead tr').length).toBe(1);
 			expect(root.querySelectorAll('tbody tr').length).toBe(2);

@@ -25,7 +25,7 @@
 			</p>
 		{/if}
 	</header>
-	<div class="prose prose-neutral dark:prose-invert max-w-none space-y-6">
+	<div class="prose prose-neutral max-w-none space-y-6">
 		{@render children?.()}
 	</div>
 </article>

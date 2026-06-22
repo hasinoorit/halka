@@ -23,31 +23,7 @@
 	--rte-radius: 0.5rem;
 	--rte-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 	--rte-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-	.rich-text-editor,
-	.rte-dialog-overlay {
-		--rte-background: #0f172a;
-		--rte-foreground: #f8fafc;
-		--rte-card: #0f172a;
-		--rte-card-foreground: #f8fafc;
-		--rte-popover: #0f172a;
-		--rte-popover-foreground: #f8fafc;
-		--rte-primary: #f8fafc;
-		--rte-primary-foreground: #0f172a;
-		--rte-secondary: #1e293b;
-		--rte-secondary-foreground: #f8fafc;
-		--rte-muted: #1e293b;
-		--rte-muted-foreground: #94a3b8;
-		--rte-accent: #1e293b;
-		--rte-accent-foreground: #f8fafc;
-		--rte-destructive: #7f1d1d;
-		--rte-destructive-foreground: #f8fafc;
-		--rte-border: #1e293b;
-		--rte-input: #1e293b;
-		--rte-ring: #475569;
-	}
+	color-scheme: light;
 }
 
 /* Find & replace match highlight */

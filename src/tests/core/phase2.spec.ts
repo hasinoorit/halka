@@ -112,4 +112,89 @@ describe('Phase 2: Virtual Formatting (No-ZWS)', () => {
 		// But state (virtual) is active
 		expect(editor.query.isActive('strong')).toBe(true);
 	});
+
+	it('should keep bold for multiple typed characters', () => {
+		editor.setHTML('<p></p>');
+		const p = root.querySelector('p')!;
+		const range = document.createRange();
+		range.setStart(p, 0);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		editor.transforms.toggleMark('strong');
+
+		root.dispatchEvent(
+			new InputEvent('beforeinput', {
+				inputType: 'insertText',
+				data: 'h',
+				bubbles: true,
+				cancelable: true
+			})
+		);
+
+		// Caret should remain inside the strong wrapper for continued typing
+		editor.insertText('ello');
+
+		expect(root.innerHTML).toContain('<strong>hello</strong>');
+		expect(root.innerHTML).not.toContain('\u200B');
+	});
+
+	it('should report DOM-active format when pending differs', () => {
+		editor.setHTML('<p><em>text</em></p>');
+		const em = root.querySelector('em')!.firstChild as Text;
+		const range = document.createRange();
+		range.setStart(em, 0);
+		range.collapse(true);
+		window.getSelection()?.removeAllRanges();
+		window.getSelection()?.addRange(range);
+
+		editor.addPendingFormat('STRONG');
+		expect(editor.query.isActive('em')).toBe(true);
+		expect(editor.query.isActive('strong')).toBe(true);
+	});
+
+	it('should suppress bold inside existing strong without unwrapping', () => {
+		editor.setHTML('<p><strong>hello</strong></p>');
+		const text = root.querySelector('strong')!.firstChild as Text;
+		const range = document.createRange();
+		range.setStart(text, 5);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		editor.transforms.toggleMark('strong');
+
+		expect(root.innerHTML).toBe('<p><strong>hello</strong></p>');
+		expect(editor.getSuppressedFormats().has('STRONG')).toBe(true);
+		expect(editor.query.isActive('strong')).toBe(false);
+
+		root.dispatchEvent(
+			new InputEvent('beforeinput', {
+				inputType: 'insertText',
+				data: ' ',
+				bubbles: true,
+				cancelable: true
+			})
+		);
+
+		editor.insertText('world');
+
+		expect(root.innerHTML).toBe('<p><strong>hello</strong> world</p>');
+	});
+
+	it('should restore bold typing after re-toggling inside strong', () => {
+		editor.setHTML('<p><strong>hello</strong></p>');
+		const text = root.querySelector('strong')!.firstChild as Text;
+		const range = document.createRange();
+		range.setStart(text, 5);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		editor.transforms.toggleMark('strong');
+		editor.transforms.toggleMark('strong');
+		expect(editor.getSuppressedFormats().has('STRONG')).toBe(false);
+		expect(editor.query.isActive('strong')).toBe(true);
+
+		editor.insertText('!');
+		expect(root.innerHTML).toBe('<p><strong>hello!</strong></p>');
+	});
 });

@@ -110,12 +110,16 @@ export abstract class Editor {
 	private _transforms?: Transform;
 	private _selection?: HalkaSelection;
 	private _pendingFormats: Set<string>;
+	private _pendingStyles: Map<string, string>;
+	private _suppressedFormats: Set<string>;
 	private _inputManager: InputManager;
 
 	constructor(root: HTMLElement) {
 		this.root = root;
 		this.schema = new Schema();
 		this._pendingFormats = new Set();
+		this._pendingStyles = new Map();
+		this._suppressedFormats = new Set();
 		this._inputManager = new InputManager(this);
 	}
 
@@ -182,6 +186,59 @@ export abstract class Editor {
 	 */
 	getPendingFormats(): Set<string> {
 		return new Set(this._pendingFormats);
+	}
+
+	/**
+	 * Add a pending inline style (next typed text will have this style)
+	 */
+	addPendingStyle(property: string, value: string): void {
+		this._pendingStyles.set(property, value);
+		this.emit('formatChange');
+	}
+
+	/**
+	 * Remove a pending inline style
+	 */
+	removePendingStyle(property: string): void {
+		this._pendingStyles.delete(property);
+		this.emit('formatChange');
+	}
+
+	/**
+	 * Clear all pending inline styles
+	 */
+	clearPendingStyles(): void {
+		this._pendingStyles.clear();
+		this.emit('formatChange');
+	}
+
+	/**
+	 * Get active pending inline styles
+	 */
+	getPendingStyles(): Map<string, string> {
+		return new Map(this._pendingStyles);
+	}
+
+	/**
+	 * Suppress an inherited DOM format for the next typed text (without unwrapping existing content).
+	 */
+	addSuppressedFormat(tagName: string): void {
+		this._suppressedFormats.add(tagName.toUpperCase());
+		this.emit('formatChange');
+	}
+
+	removeSuppressedFormat(tagName: string): void {
+		this._suppressedFormats.delete(tagName.toUpperCase());
+		this.emit('formatChange');
+	}
+
+	clearSuppressedFormats(): void {
+		this._suppressedFormats.clear();
+		this.emit('formatChange');
+	}
+
+	getSuppressedFormats(): Set<string> {
+		return new Set(this._suppressedFormats);
 	}
 
 	get inline(): boolean {
@@ -390,6 +447,13 @@ export class HalkaEditor extends Editor {
 	}
 
 	getStyle(property: string): string | undefined {
+		const range = this.getRange();
+		if (range.collapsed) {
+			const pending = this.getPendingStyles();
+			if (pending.has(property)) {
+				return pending.get(property);
+			}
+		}
 		return this.activeStyles[property];
 	}
 
@@ -536,6 +600,7 @@ export class HalkaEditor extends Editor {
 			const range = this.getRange();
 
 			if (isColorStyle && value === undefined) {
+				this.removePendingStyle(style);
 				this.clearNearestStyleProperty(style, range);
 				return;
 			}
@@ -576,7 +641,15 @@ export class HalkaEditor extends Editor {
 				return;
 			}
 
-			if (value === undefined) return;
+			if (value === undefined) {
+				this.removePendingStyle(style);
+				return;
+			}
+
+			if (range.collapsed) {
+				this.addPendingStyle(style, value);
+				return;
+			}
 
 			const element = this.createEl('span');
 			element.style.setProperty(style, value);
@@ -639,6 +712,7 @@ export class HalkaEditor extends Editor {
 	}
 
 	clearStyles(): void {
+		this.clearPendingStyles();
 		this.runTransaction(() => {
 			this.selection.preserveSelection(() => {
 				const scope = this.getSelectionRoot(this.getRange());
@@ -865,6 +939,10 @@ export class HalkaEditor extends Editor {
 				? this.computeSelectionOffsets(currentSelection!.getRangeAt(0))
 				: this.savedSelectionOffsets;
 
+		const offsetsAtStart = this.savedSelectionOffsets
+			? { start: this.savedSelectionOffsets.start, end: this.savedSelectionOffsets.end }
+			: undefined;
+
 		this.root.focus();
 
 		if (!hasActiveSelection && (this.savedSelectionRange || this.savedSelectionOffsets)) {
@@ -872,6 +950,17 @@ export class HalkaEditor extends Editor {
 		}
 
 		cb(this);
+
+		const offsetsAfterCb = this.savedSelectionOffsets;
+		const selectionWasExplicit =
+			!!offsetsAfterCb &&
+			(!offsetsAtStart ||
+				offsetsAfterCb.start !== offsetsAtStart.start ||
+				offsetsAfterCb.end !== offsetsAtStart.end);
+
+		const preferredOffsets = selectionWasExplicit
+			? offsetsAfterCb
+			: preMutationOffsets;
 
 		let merged = false;
 		try {
@@ -908,24 +997,35 @@ export class HalkaEditor extends Editor {
 		}
 
 		if (merged) {
-			this.reconcileSelectionAfterMutation(preMutationOffsets);
+			this.reconcileSelectionAfterMutation(preferredOffsets);
 		}
 
 		const afterHTML = this.getHTML();
 		if (afterHTML !== beforeHTML) {
-			const offsetsBeforeNormalize = this.savedSelectionOffsets ?? preMutationOffsets;
+			const selection = this.window.getSelection();
+			const postMutationOffsets =
+				selection &&
+				selection.rangeCount > 0 &&
+				this.root.contains(selection.getRangeAt(0).commonAncestorContainer)
+					? this.computeSelectionOffsets(selection.getRangeAt(0))
+					: null;
+
 			this.normalizeHTML();
-			if (offsetsBeforeNormalize) {
-				const selection = this.window.getSelection();
-				if (selection) {
+
+			if (selection) {
+				const offsetsToRestore = selectionWasExplicit
+					? offsetsAfterCb
+					: postMutationOffsets ?? offsetsAfterCb ?? preMutationOffsets;
+
+				if (offsetsToRestore) {
 					RangeHelpers.restoreSelectionByOffsets(
 						selection,
 						this.root,
-						offsetsBeforeNormalize.start,
-						offsetsBeforeNormalize.end
+						offsetsToRestore.start,
+						offsetsToRestore.end
 					);
-					this.selection.normalize();
 				}
+				this.selection.normalize();
 			}
 			this.saveSelection();
 			this.reportContentChangeIfNeeded();

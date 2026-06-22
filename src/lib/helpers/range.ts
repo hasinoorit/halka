@@ -144,15 +144,23 @@ const surround = (elementDOM: HTMLElement, win?: Window, providedRange?: Range):
 	const range = providedRange || getRange(win);
 	if (!range) return;
 
+	let zwsTextNode: Text | null = null;
+
 	if (range.collapsed) {
-		const textNode = ZERO_WITH_TEXT_NODE(win);
-		range.insertNode(textNode);
-		range.selectNode(textNode);
+		zwsTextNode = ZERO_WITH_TEXT_NODE(win);
+		range.insertNode(zwsTextNode);
+		range.selectNode(zwsTextNode);
 	}
 
 	wrapSelectionWith(elementDOM, win, range);
 
-	range.selectNodeContents(elementDOM);
+	if (zwsTextNode && zwsTextNode.parentElement === elementDOM) {
+		range.setStart(zwsTextNode, zwsTextNode.length);
+		range.collapse(true);
+	} else {
+		range.selectNodeContents(elementDOM);
+		range.collapse(false);
+	}
 
 	focusEditableElement(win);
 };

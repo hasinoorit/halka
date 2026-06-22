@@ -43,16 +43,28 @@ export class Transform {
 	/**
 	 * Insert text at the current selection
 	 */
-	insertText(text: string, formats?: Set<string>): this {
+	insertText(
+		text: string,
+		formats?: Set<string>,
+		styles?: Map<string, string>
+	): this {
 		this.editor.runTransaction(() => {
 			const range = this.editor.getRange();
 			range.deleteContents();
 
-			let node: Node = this.editor.window.document.createTextNode(text);
+			const textNode = this.editor.window.document.createTextNode(text);
+			let node: Node = textNode;
 
-			// Wrap text in formats if provided
+			if (styles && styles.size > 0) {
+				const span = this.editor.createEl('span');
+				for (const [property, value] of styles) {
+					span.style.setProperty(property, value);
+				}
+				span.appendChild(node);
+				node = span;
+			}
+
 			if (formats && formats.size > 0) {
-				// Create elements for each format
 				for (const tagName of formats) {
 					const wrapper = this.editor.createEl(tagName);
 					wrapper.appendChild(node);
@@ -61,7 +73,68 @@ export class Transform {
 			}
 
 			range.insertNode(node);
-			this.editor.selection.setCursorAfter(node);
+			this.editor.selection.setCursorAt(textNode, text.length);
+		});
+		return this;
+	}
+
+	/**
+	 * Insert plain text, splitting an ancestor format so the text is not wrapped by it.
+	 */
+	insertTextOutsideFormat(text: string, tagName: string): this {
+		this.editor.runTransaction(() => {
+			const range = this.editor.getRange();
+			range.deleteContents();
+
+			const textNode = this.editor.window.document.createTextNode(text);
+			const wrapper = this.editor.query.findClosest(tagName);
+
+			if (!wrapper || !wrapper.contains(range.startContainer)) {
+				range.insertNode(textNode);
+				this.editor.selection.setCursorAt(textNode, text.length);
+				return;
+			}
+
+			const wrapperEl = wrapper as HTMLElement;
+
+			if (range.startContainer.nodeType === Node.TEXT_NODE) {
+				const tn = range.startContainer as Text;
+				if (!wrapperEl.contains(tn)) {
+					range.insertNode(textNode);
+					this.editor.selection.setCursorAt(textNode, text.length);
+					return;
+				}
+
+				const offset = range.startOffset;
+
+				if (offset === 0) {
+					wrapperEl.parentNode?.insertBefore(textNode, wrapperEl);
+				} else if (offset >= tn.length && !tn.nextSibling) {
+					wrapperEl.parentNode?.insertBefore(textNode, wrapperEl.nextSibling);
+				} else {
+					const after = tn.splitText(offset);
+					const tailWrapper = this.editor.createEl(tagName);
+					wrapperEl.parentNode?.insertBefore(tailWrapper, wrapperEl.nextSibling);
+					tailWrapper.appendChild(after);
+					let sibling = after.nextSibling;
+					while (sibling) {
+						const next = sibling.nextSibling;
+						tailWrapper.appendChild(sibling);
+						sibling = next;
+					}
+					wrapperEl.parentNode?.insertBefore(textNode, tailWrapper);
+				}
+			} else if (range.startContainer === wrapperEl) {
+				if (range.startOffset === 0) {
+					wrapperEl.parentNode?.insertBefore(textNode, wrapperEl);
+				} else {
+					wrapperEl.parentNode?.insertBefore(textNode, wrapperEl.nextSibling);
+				}
+			} else {
+				wrapperEl.parentNode?.insertBefore(textNode, wrapperEl.nextSibling);
+			}
+
+			this.editor.selection.setCursorAt(textNode, text.length);
 		});
 		return this;
 	}
@@ -75,34 +148,23 @@ export class Transform {
 			if (this.editor.getRange().collapsed) {
 				const tagUpper = tagName.toUpperCase();
 				const pending = this.editor.getPendingFormats();
-				// Explicit DOM-active check for current caret context
+				const suppressed = this.editor.getSuppressedFormats();
 				const domActive = this.editor.query.findClosest(tagName) !== null;
+				const effectivelyActive =
+					pending.has(tagUpper) || (domActive && !suppressed.has(tagUpper));
 
-				if (domActive) {
-					if (pending.has(tagUpper)) {
-						this.editor.removePendingFormat(tagName);
-					}
-					
-					const offsets = this.editor.getSelectionOffsets();
-					RangeHelpers.unwrapWith(tagName, this.editor.window);
-					if (offsets && this.editor.window.getSelection()) {
-						RangeHelpers.restoreSelectionByOffsets(
-							this.editor.window.getSelection()!,
-							this.editor.root,
-							offsets.start,
-							offsets.end
-						);
-					}
-					return;
-				}
-
-				// Otherwise toggle virtual pending format without DOM change
-				if (pending.has(tagUpper)) {
+				if (effectivelyActive) {
 					this.editor.removePendingFormat(tagName);
+					if (domActive) {
+						this.editor.addSuppressedFormat(tagName);
+					}
 				} else {
-					this.editor.addPendingFormat(tagName);
+					this.editor.removeSuppressedFormat(tagName);
+					if (!domActive) {
+						this.editor.addPendingFormat(tagName);
+					}
 				}
-				
+
 				const range = this.editor.getRange();
 				this.editor.selection.setCursorAt(range.startContainer, range.startOffset);
 				return;
@@ -160,6 +222,7 @@ export class Transform {
 				});
 			});
 			this.editor.clearPendingFormats();
+			this.editor.clearSuppressedFormats();
 			if (offsets && this.editor.window.getSelection()) {
 				RangeHelpers.restoreSelectionByOffsets(
 					this.editor.window.getSelection()!,
