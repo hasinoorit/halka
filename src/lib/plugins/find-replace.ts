@@ -112,7 +112,8 @@ function getCursorOffset(editor: Editor): number {
 	return computed?.start ?? 0;
 }
 
-const FIND_HIGHLIGHT_NAME = 'halka-find-active';
+const FIND_ALL_HIGHLIGHT_NAME = 'halka-find-all';
+const FIND_ACTIVE_HIGHLIGHT_NAME = 'halka-find-active';
 
 function supportsCssHighlight(): boolean {
 	return (
@@ -122,15 +123,43 @@ function supportsCssHighlight(): boolean {
 	);
 }
 
-function clearFindHighlight(): void {
-	if (supportsCssHighlight()) {
-		CSS.highlights.delete(FIND_HIGHLIGHT_NAME);
-	}
+function clearFindHighlights(): void {
+	if (!supportsCssHighlight()) return;
+	CSS.highlights.delete(FIND_ALL_HIGHLIGHT_NAME);
+	CSS.highlights.delete(FIND_ACTIVE_HIGHLIGHT_NAME);
 }
 
-function applyFindHighlight(range: Range): void {
+function updateFindHighlights(editor: Editor): void {
 	if (!supportsCssHighlight()) return;
-	CSS.highlights.set(FIND_HIGHLIGHT_NAME, new Highlight(range));
+
+	const session = getSession(editor);
+	clearFindHighlights();
+
+	if (!session.query || session.matches.length === 0) return;
+
+	const allHighlight = new Highlight();
+	for (const match of session.matches) {
+		const range = RangeHelpers.createRangeByOffsets(editor.root, match.start, match.end);
+		if (range) allHighlight.add(range);
+	}
+
+	if (allHighlight.size > 0) {
+		CSS.highlights.set(FIND_ALL_HIGHLIGHT_NAME, allHighlight);
+	}
+
+	if (session.currentIndex >= 0) {
+		const current = session.matches[session.currentIndex];
+		if (current) {
+			const activeRange = RangeHelpers.createRangeByOffsets(
+				editor.root,
+				current.start,
+				current.end
+			);
+			if (activeRange) {
+				CSS.highlights.set(FIND_ACTIVE_HIGHLIGHT_NAME, new Highlight(activeRange));
+			}
+		}
+	}
 }
 
 function scrollMatchIntoView(editor: Editor): void {
@@ -153,12 +182,8 @@ function selectMatch(editor: Editor, match: TextMatch): void {
 	RangeHelpers.restoreSelectionByOffsets(selection, editor.root, match.start, match.end);
 	scrollMatchIntoView(editor);
 
-	if (selection.rangeCount === 0) return;
-
-	const range = selection.getRangeAt(0);
 	if (supportsCssHighlight()) {
-		clearFindHighlight();
-		applyFindHighlight(range);
+		updateFindHighlights(editor);
 		return;
 	}
 
@@ -169,7 +194,7 @@ function selectMatchAtIndex(editor: Editor, index: number): void {
 	const session = getSession(editor);
 	if (index < 0 || index >= session.matches.length) {
 		session.currentIndex = -1;
-		clearFindHighlight();
+		updateFindHighlights(editor);
 		return;
 	}
 
@@ -178,7 +203,7 @@ function selectMatchAtIndex(editor: Editor, index: number): void {
 }
 
 function replaceMatchAt(editor: Editor, match: TextMatch, replacement: string): void {
-	clearFindHighlight();
+	clearFindHighlights();
 	editor.runTransaction(() => {
 		selectMatch(editor, match);
 		const range = editor.getRange();
@@ -211,8 +236,9 @@ function applyOptions(editor: Editor, options: FindReplaceOptions = {}): void {
 
 	if (searchChanged) {
 		session.currentIndex = -1;
-		clearFindHighlight();
 	}
+
+	updateFindHighlights(editor);
 }
 
 export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
@@ -226,7 +252,7 @@ export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
 		const session = getSession(editor);
 		session.isOpen = false;
 		session.currentIndex = -1;
-		clearFindHighlight();
+		clearFindHighlights();
 	};
 
 	const find = () => {
@@ -243,7 +269,7 @@ export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
 
 		if (session.matches.length === 0) {
 			session.currentIndex = -1;
-			clearFindHighlight();
+			updateFindHighlights(editor);
 			return;
 		}
 
@@ -257,7 +283,7 @@ export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
 
 		if (session.matches.length === 0) {
 			session.currentIndex = -1;
-			clearFindHighlight();
+			updateFindHighlights(editor);
 			return;
 		}
 
@@ -282,7 +308,7 @@ export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
 
 		if (session.matches.length === 0) {
 			session.currentIndex = -1;
-			clearFindHighlight();
+			updateFindHighlights(editor);
 			return;
 		}
 
@@ -320,7 +346,7 @@ export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
 
 		session.matches = [];
 		session.currentIndex = -1;
-		clearFindHighlight();
+		clearFindHighlights();
 	};
 
 	const handleOpen: CommandHandler<'findReplace.open'> = (payload) =>
@@ -367,7 +393,7 @@ export const findReplacePlugin: HalkaPlugin = (editor: Editor) => {
 		editor.unregisterState('findReplace.state', handleGetState);
 		editor.offShortcut('mod+f', onModF);
 		editor.offShortcut('mod+h', onModH);
-		clearFindHighlight();
+		clearFindHighlights();
 		sessions.delete(editor);
 	};
 };

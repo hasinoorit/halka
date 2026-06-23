@@ -26,7 +26,16 @@
 	color-scheme: light;
 }
 
-/* Find & replace match highlight */
+/* Find & replace match highlights (CSS Custom Highlight API) */
+::highlight(halka-find-all) {
+	background-color: #fef08a;
+	color: inherit;
+}
+
+::highlight(halka-find-active) {
+	background-color: #facc15;
+	color: inherit;
+}
 
 
 /* Layout */

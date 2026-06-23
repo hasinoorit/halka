@@ -499,21 +499,13 @@ function findTextPositionAtOffset(
 	return null;
 }
 
-function restoreSelectionByOffsets(
-	selection: Selection,
-	editor: HTMLElement,
-	start: number,
-	end: number
-) {
-	// First try exact loose match
+function createRangeByOffsets(editor: HTMLElement, start: number, end: number): Range | null {
 	let startPos = findTextPositionAtOffset(editor, start, true, false);
 	let endPos = findTextPositionAtOffset(editor, end, false, true);
 
-	// Fallback 1: Retry without strict boundary checks
 	if (!startPos) startPos = findTextPositionAtOffset(editor, start, false, false);
 	if (!endPos) endPos = findTextPositionAtOffset(editor, end, false, false);
 
-	// Fallback 2: Clamp to document end if offsets are out of bounds
 	if (!startPos || !endPos) {
 		const totalLength = countEditableText(editor);
 
@@ -528,24 +520,33 @@ function restoreSelectionByOffsets(
 		}
 	}
 
-	// Final fallback: collapse at end of editor (e.g. empty <p><br></p>)
-	if (!startPos || !endPos) {
-		const range = editor.ownerDocument.createRange();
-		range.selectNodeContents(editor);
-		range.collapse(false);
+	if (!startPos || !endPos) return null;
+
+	const range = editor.ownerDocument.createRange();
+	range.setStart(startPos.node, startPos.offsetInNode);
+	range.setEnd(endPos.node, endPos.offsetInNode);
+	return range;
+}
+
+function restoreSelectionByOffsets(
+	selection: Selection,
+	editor: HTMLElement,
+	start: number,
+	end: number
+) {
+	const range = createRangeByOffsets(editor, start, end);
+
+	if (!range) {
+		const fallback = editor.ownerDocument.createRange();
+		fallback.selectNodeContents(editor);
+		fallback.collapse(false);
 		selection.removeAllRanges();
-		selection.addRange(range);
+		selection.addRange(fallback);
 		return;
 	}
 
-	// Ensure we have valid nodes
-	if (startPos && endPos) {
-		const range = editor.ownerDocument.createRange();
-		range.setStart(startPos.node, startPos.offsetInNode);
-		range.setEnd(endPos.node, endPos.offsetInNode);
-		selection.removeAllRanges();
-		selection.addRange(range);
-	}
+	selection.removeAllRanges();
+	selection.addRange(range);
 }
 
 export {
@@ -563,5 +564,6 @@ export {
 	splitText,
 	undo,
 	unwrapWith,
+	createRangeByOffsets,
 	restoreSelectionByOffsets
 };

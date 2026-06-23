@@ -8,6 +8,7 @@ import {
 } from '../../lib/helpers/text-search.js';
 import { HalkaEditor } from '../../lib/core/editor.js';
 import { findReplacePlugin } from '../../lib/plugins/find-replace.js';
+import { Range as RangeHelpers } from '../../lib/helpers/index.js';
 
 const createRoot = () => {
 	const root = document.createElement('div');
@@ -117,6 +118,28 @@ describe('findReplacePlugin', () => {
 
 		expect(root.textContent).toBe('1 two 1');
 		expect(editor.getState('findReplace.state')?.matchCount).toBe(0);
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('highlights all matches without moving selection when query changes', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false, plugins: [findReplacePlugin] });
+
+		editor.setHTML('<p>foo bar foo baz</p>');
+		const selection = editor.getSelection();
+		if (!selection) throw new Error('expected selection');
+
+		RangeHelpers.restoreSelectionByOffsets(selection, root, 4, 4);
+		const before = editor.getSelectionOffsets();
+
+		editor.execCommand('findReplace.setOptions', { query: 'foo' });
+
+		const after = editor.getSelectionOffsets();
+		expect(after).toEqual(before);
+		expect(editor.getState('findReplace.state')?.matchCount).toBe(2);
+		expect(editor.getState('findReplace.state')?.currentIndex).toBe(-1);
 
 		document.body.removeChild(root);
 		editor.destroy();
