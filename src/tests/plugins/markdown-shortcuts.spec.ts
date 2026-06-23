@@ -240,4 +240,46 @@ describe('markdownShortcutsPlugin', () => {
         document.body.removeChild(root);
         editor.destroy();
     });
+
+    it('keeps caret in the new ordered list item when "1." is typed on an empty line below content', () => {
+        const root = createRoot();
+        const editor = new HalkaEditor(root, {
+            shortcuts: false,
+            plugins: [listPlugin, markdownShortcutsPlugin]
+        });
+
+        editor.setHTML('<p>first</p><p>1.</p>');
+
+        const secondP = root.children[1] as HTMLElement;
+        const text = secondP.firstChild as Text;
+        const range = document.createRange();
+        range.setStart(text, 2);
+        range.setEnd(text, 2);
+        editor.setSelection(range);
+
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        root.dispatchEvent(event);
+
+        const ol = root.querySelector('ol');
+        expect(ol).not.toBeNull();
+        const li = ol!.querySelector('li')!;
+
+        const caretRange = editor.getRange();
+        let node: Node | null = caretRange.startContainer;
+        let caretLi: HTMLElement | null = null;
+        while (node && node !== root) {
+            if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === 'LI') {
+                caretLi = node as HTMLElement;
+                break;
+            }
+            node = node.parentNode;
+        }
+
+        expect(caretRange.collapsed).toBe(true);
+        expect(caretLi).toBe(li);
+        expect(root.querySelector('p')?.textContent).toBe('first');
+
+        document.body.removeChild(root);
+        editor.destroy();
+    });
 });

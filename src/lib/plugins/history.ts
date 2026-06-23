@@ -100,7 +100,9 @@ export const historyPlugin: HalkaPlugin = (editor: Editor) => {
             ed.setHTML(entry!.from.html);
             if (entry!.from.selection) {
                 ed.setSelectionOffsets(entry!.from.selection);
-                ed.applySelection();
+                // Force the live selection to reflect the restored offsets so the
+                // transaction's selection reconciliation keeps it.
+                ed.applySelection(true);
             }
         });
         isApplying = false;
@@ -119,7 +121,9 @@ export const historyPlugin: HalkaPlugin = (editor: Editor) => {
             ed.setHTML(entry!.to.html);
             if (entry!.to.selection) {
                 ed.setSelectionOffsets(entry!.to.selection);
-                ed.applySelection();
+                // Force the live selection to reflect the restored offsets so the
+                // transaction's selection reconciliation keeps it.
+                ed.applySelection(true);
             }
         });
         isApplying = false;

@@ -115,14 +115,20 @@ const toggleListForSelection = (editor: Editor, type: 'unordered' | 'ordered'): 
 		}
 
 		if ((!block || block === root) && range.commonAncestorContainer === root) {
-			const index = Math.max(0, range.startOffset - 1);
-			const candidate = root.childNodes[index] as Node | undefined;
+			const nodes = Array.from(root.childNodes);
+			const index = Math.max(0, Math.min(range.startOffset, nodes.length));
 
-			if (isElementNode(candidate)) {
-				block = candidate as HTMLElement;
-			} else if (candidate) {
-				block = NodeHelpers.getClosestBlockElement(candidate, root) as HTMLElement | null;
-			}
+			const resolveBlock = (node: Node | undefined): HTMLElement | null => {
+				if (!node) return null;
+				if (isElementNode(node)) {
+					return node as HTMLElement;
+				}
+				return NodeHelpers.getClosestBlockElement(node, root) as HTMLElement | null;
+			};
+
+			// Prefer the node at the caret boundary first (start of current line),
+			// then fall back to previous sibling when caret is after a block.
+			block = resolveBlock(nodes[index]) ?? resolveBlock(nodes[index - 1]);
 		}
 
 		if (!block || block === root) return;

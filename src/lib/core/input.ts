@@ -1,5 +1,6 @@
 import type { Editor } from './editor.js';
 import { handleDeleteContentBackward } from './block-delete.js';
+import { handleInsertParagraphInList } from './list-enter.js';
 
 const ZWS = '\u200B';
 
@@ -26,6 +27,12 @@ export class InputManager {
 	private handleBeforeInput(event: InputEvent) {
 		if (event.inputType === 'deleteContentBackward') {
 			if (handleDeleteContentBackward(this.editor, event)) {
+				return;
+			}
+		}
+
+		if (event.inputType === 'insertParagraph') {
+			if (handleInsertParagraphInList(this.editor, event)) {
 				return;
 			}
 		}

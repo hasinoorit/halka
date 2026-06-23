@@ -830,18 +830,7 @@ export class HalkaEditor extends Editor {
 		const before = this.getHTML();
 		this.normalizeHTML();
 
-		if (offsets) {
-			const sel = this.window.getSelection();
-			if (sel) {
-				RangeHelpers.restoreSelectionByOffsets(
-					sel,
-					this.root,
-					offsets.start,
-					offsets.end
-				);
-				this.selection.normalize();
-			}
-		}
+		this.reconcileSelectionAfterMutation(offsets);
 		this.saveSelection();
 
 		const after = this.getHTML();
@@ -1010,24 +999,18 @@ export class HalkaEditor extends Editor {
 					? this.computeSelectionOffsets(selection.getRangeAt(0))
 					: null;
 
+			const offsetsToRestore = selectionWasExplicit
+				? offsetsAfterCb
+				: postMutationOffsets ?? offsetsAfterCb ?? preMutationOffsets;
+
 			this.normalizeHTML();
 
-			if (selection) {
-				const offsetsToRestore = selectionWasExplicit
-					? offsetsAfterCb
-					: postMutationOffsets ?? offsetsAfterCb ?? preMutationOffsets;
-
-				if (offsetsToRestore) {
-					RangeHelpers.restoreSelectionByOffsets(
-						selection,
-						this.root,
-						offsetsToRestore.start,
-						offsetsToRestore.end
-					);
-				}
-				this.selection.normalize();
-			}
-			this.saveSelection();
+			// Prefer the still-valid live range (it can represent carets in empty
+			// blocks that integer offsets cannot), falling back to offsets only when
+			// normalization detached the caret node. Callbacks that need a specific
+			// selection must leave it reflected in the live DOM selection (e.g. via
+			// setSelection/applySelection(true)).
+			this.reconcileSelectionAfterMutation(offsetsToRestore);
 			this.reportContentChangeIfNeeded();
 		}
 	}
@@ -1233,7 +1216,33 @@ export class HalkaEditor extends Editor {
 
 			if (!listContainer || listItem) return null;
 
-			let targetLi = listContainer.querySelector('li');
+			let targetLi: HTMLElement | null = null;
+			if (range.startContainer === listContainer) {
+				const nodes = Array.from(listContainer.childNodes);
+				const childIndex = Math.max(0, Math.min(range.startOffset, nodes.length));
+
+				for (let i = childIndex; i < nodes.length; i++) {
+					const candidate = nodes[i];
+					if (isElementNode(candidate) && candidate.tagName === 'LI') {
+						targetLi = candidate as HTMLElement;
+						break;
+					}
+				}
+
+				if (!targetLi) {
+					for (let i = childIndex - 1; i >= 0; i--) {
+						const candidate = nodes[i];
+						if (isElementNode(candidate) && candidate.tagName === 'LI') {
+							targetLi = candidate as HTMLElement;
+							break;
+						}
+					}
+				}
+			}
+
+			if (!targetLi) {
+				targetLi = listContainer.querySelector('li');
+			}
 			if (!targetLi) {
 				targetLi = this.createEl('li');
 				const br = this.createEl('br');

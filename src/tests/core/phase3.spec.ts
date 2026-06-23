@@ -112,4 +112,37 @@ describe('Phase 3: Selection Stability', () => {
 		expect(current.startContainer).toBe(li);
 		expect(current.startOffset).toBe(0);
 	});
+
+	it('should normalize selection to list item at container offset', () => {
+		editor.setHTML('<ul><li>First</li><li>Second</li></ul>');
+		const ul = root.querySelector('ul')!;
+		const range = document.createRange();
+		range.setStart(ul, 1);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		const current = editor.getRange();
+		const items = root.querySelectorAll('li');
+
+		expect(current.collapsed).toBe(true);
+		expect(current.startContainer).toBe(items[1]);
+		expect(current.startOffset).toBe(0);
+	});
+
+	it('should normalize selection correctly with whitespace text nodes in list', () => {
+		editor.setHTML('<ul>\n<li>First</li>\n<li>Second</li>\n</ul>');
+		const ul = root.querySelector('ul')!;
+		const range = document.createRange();
+		// childNodes: " ", li(First), " ", li(Second), " "
+		range.setStart(ul, 2);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		const current = editor.getRange();
+		const items = root.querySelectorAll('li');
+
+		expect(current.collapsed).toBe(true);
+		expect(current.startContainer).toBe(items[1]);
+		expect(current.startOffset).toBe(0);
+	});
 });
