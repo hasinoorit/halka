@@ -1,6 +1,6 @@
 {
 	"name": "halka",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/hasinoorit/halka.git"
@@ -86,9 +86,6 @@
 			"import": "./dist/plugins/find-replace.js",
 			"default": "./dist/plugins/find-replace.js"
 		}
-	},
-	"peerDependencies": {
-		"svelte": "^5.0.0"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",
