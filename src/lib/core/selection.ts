@@ -1,5 +1,12 @@
 import type { Editor } from './editor.js';
 import { isElementNode, isTextNode } from '../helpers/node.js';
+import { Range as RangeHelpers } from '../helpers/index.js';
+
+export interface SelectionBookmark {
+	start: number;
+	end: number;
+	collapsed: boolean;
+}
 
 function isNodeEffectivelyEmpty(node: Node): boolean {
 	if (isTextNode(node)) return node.textContent?.trim() === '';
@@ -330,12 +337,62 @@ export class HalkaSelection {
 	}
 
 	/**
-	 * Execute a callback while preserving selection using markers
-	 * Useful for operations that significantly change the DOM structure
+	 * Snapshot the current selection as structure-independent text offsets.
+	 * Returns null when the live selection is outside root or cannot be
+	 * represented as text offsets (e.g. a collapsed caret with no editable
+	 * text, adjacent to a void/empty block), so callers can fall back to markers.
+	 */
+	capture(): SelectionBookmark | null {
+		const sel = this.editor.window.getSelection();
+		if (!sel || sel.rangeCount === 0) return null;
+
+		const liveRange = sel.getRangeAt(0);
+		if (!this.editor.root.contains(liveRange.commonAncestorContainer)) return null;
+
+		// Collapsed carets cannot be reliably re-derived from text offsets: a
+		// caret on an empty line shares the same offset as the end of the
+		// preceding content, and a caret in a freshly created empty block has no
+		// text to anchor to. Fall back to DOM markers for those (handled by the
+		// caller), and use offsets only for non-collapsed range selections —
+		// which is where structure-independent restoration actually matters
+		// (e.g. wrapping the selection in a styled span).
+		if (liveRange.collapsed) return null;
+
+		const offsets = this.editor.computeSelectionOffsets(liveRange);
+		if (!offsets) return null;
+
+		return { start: offsets.start, end: offsets.end, collapsed: false };
+	}
+
+	/**
+	 * Restore a previously captured selection bookmark.
+	 */
+	restore(bookmark: SelectionBookmark): void {
+		const sel = this.editor.window.getSelection();
+		if (!sel) return;
+		RangeHelpers.restoreSelectionByOffsets(sel, this.editor.root, bookmark.start, bookmark.end);
+		this.normalize();
+	}
+
+	/**
+	 * Execute a callback while preserving selection.
+	 * Uses structure-independent text offsets when possible, falling back to
+	 * DOM markers for selections that offsets cannot represent.
 	 */
 	preserveSelection(callback: () => void): this {
+		const bookmark = this.capture();
+
+		if (bookmark) {
+			try {
+				callback();
+			} finally {
+				this.restore(bookmark);
+			}
+			return this;
+		}
+
 		const markers = this.createMarkers();
-		
+
 		try {
 			callback();
 		} finally {
@@ -343,7 +400,7 @@ export class HalkaSelection {
 				this.restoreMarkers(markers);
 			}
 		}
-		
+
 		return this;
 	}
 

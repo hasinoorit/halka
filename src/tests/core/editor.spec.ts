@@ -180,6 +180,117 @@ describe('HalkaEditor', () => {
 		editor.destroy();
 	});
 
+	it('preserves selection when applying color to unstyled text', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p>hello world</p>');
+		const text = getParagraphText(root);
+
+		const range = document.createRange();
+		range.setStart(text, 0);
+		range.setEnd(text, 5);
+		editor.setSelection(range);
+
+		editor.setInlineStyle('color', 'red');
+
+		const span = root.querySelector('span');
+		expect(span).not.toBeNull();
+		expect(span!.style.getPropertyValue('color')).toBe('red');
+		expect(span!.textContent).toBe('hello');
+
+		const selection = window.getSelection()!;
+		expect(selection.rangeCount).toBe(1);
+		const after = selection.getRangeAt(0);
+		expect(after.collapsed).toBe(false);
+		expect(after.toString()).toBe('hello');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('preserves selection when applying block style', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p>hello world</p>');
+		const text = getParagraphText(root);
+
+		const range = document.createRange();
+		range.setStart(text, 0);
+		range.setEnd(text, 5);
+		editor.setSelection(range);
+
+		editor.setBlockStyle('text-align', 'center');
+
+		const paragraph = root.querySelector('p')!;
+		expect(paragraph.style.getPropertyValue('text-align')).toBe('center');
+
+		const selection = window.getSelection()!;
+		expect(selection.rangeCount).toBe(1);
+		const after = selection.getRangeAt(0);
+		expect(after.collapsed).toBe(false);
+		expect(after.toString()).toBe('hello');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('preserves selection when clearing styles', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p><span style="color: red">hello</span> world</p>');
+		const span = root.querySelector('span')!;
+		const text = span.firstChild as Text;
+
+		const range = document.createRange();
+		range.setStart(text, 0);
+		range.setEnd(text, 5);
+		editor.setSelection(range);
+
+		editor.clearStyles();
+
+		expect(root.querySelector('span[style]')).toBeNull();
+
+		const selection = window.getSelection()!;
+		expect(selection.rangeCount).toBe(1);
+		const after = selection.getRangeAt(0);
+		expect(after.collapsed).toBe(false);
+		expect(after.toString()).toBe('hello');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
+	it('preserves selection when wrapping via transforms', () => {
+		const root = createRoot();
+		const editor = new HalkaEditor(root, { shortcuts: false });
+
+		editor.setHTML('<p>hello world</p>');
+		const text = getParagraphText(root);
+
+		const range = document.createRange();
+		range.setStart(text, 0);
+		range.setEnd(text, 5);
+		editor.setSelection(range);
+
+		editor.transforms.wrap('mark');
+
+		const mark = root.querySelector('mark');
+		expect(mark).not.toBeNull();
+		expect(mark!.textContent).toBe('hello');
+
+		const selection = window.getSelection()!;
+		expect(selection.rangeCount).toBe(1);
+		const after = selection.getRangeAt(0);
+		expect(after.collapsed).toBe(false);
+		expect(after.toString()).toBe('hello');
+
+		document.body.removeChild(root);
+		editor.destroy();
+	});
+
 	it('clears style and unwraps empty span when value is omitted', () => {
 		const root = createRoot();
 		const editor = new HalkaEditor(root, { shortcuts: false });

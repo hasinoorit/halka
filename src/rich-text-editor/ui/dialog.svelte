@@ -10,10 +10,22 @@
 		children?: Snippet;
 		footer?: Snippet;
 		hideFooter?: boolean;
+		overlayClass?: string;
+		dialogClass?: string;
 		onClose: () => void;
 	}
 
-	let { open, title, description, hideFooter = false, children, footer, onClose }: Props = $props();
+	let {
+		open,
+		title,
+		description,
+		hideFooter = false,
+		children,
+		footer,
+		overlayClass = '',
+		dialogClass = '',
+		onClose
+	}: Props = $props();
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape' && open) {
@@ -32,13 +44,13 @@
 
 {#if open}
 	<div
-		class="rte-dialog-overlay"
+		class="rte-dialog-overlay {overlayClass}"
 		transition:fade={{ duration: 150 }}
 		onclick={handleBackdropClick}
 		role="presentation"
 	>
 		<div
-			class="rte-dialog"
+			class="rte-dialog {dialogClass}"
 			transition:scale={{ duration: 150, start: 0.95 }}
 			role="dialog"
 			aria-modal="true"

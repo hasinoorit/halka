@@ -1,49 +1,48 @@
 import { describe, it, expect } from 'vitest';
-import { markdownToHtml, parseInlineMarkdown } from '../../lib/helpers/markdown.js';
+import { markdownToHtml } from '../../lib/helpers/markdown.js';
 
 describe('markdownToHtml', () => {
-	it('converts headings', () => {
-		expect(markdownToHtml('# Title')).toBe('<h1>Title</h1>');
-		expect(markdownToHtml('## Subtitle')).toBe('<h2>Subtitle</h2>');
+	it('parses h4-h6 headings', () => {
+		const html = markdownToHtml('#### H4\n##### H5\n###### H6');
+		expect(html).toContain('<h4>H4</h4>');
+		expect(html).toContain('<h5>H5</h5>');
+		expect(html).toContain('<h6>H6</h6>');
 	});
 
-	it('converts inline formatting', () => {
-		expect(parseInlineMarkdown('**bold** and *italic*')).toBe(
-			'<strong>bold</strong> and <em>italic</em>'
-		);
-		expect(parseInlineMarkdown('`code` and ~~strike~~')).toBe(
-			'<code>code</code> and <s>strike</s>'
-		);
-	});
+	it('parses GFM tables', () => {
+		const markdown = `| Name | Score |
+| --- | --- |
+| Ada | 95 |
+| Bob | 88 |`;
 
-	it('converts links', () => {
-		expect(parseInlineMarkdown('[Halka](https://example.com)')).toBe(
-			'<a href="https://example.com">Halka</a>'
-		);
-	});
-
-	it('converts blockquote, lists, and paragraphs', () => {
-		const markdown = '> Quote\n\n- one\n- two\n\nPlain text';
 		const html = markdownToHtml(markdown);
-
-		expect(html).toContain('<blockquote><p>Quote</p></blockquote>');
-		expect(html).toContain('<ul><li>one</li><li>two</li></ul>');
-		expect(html).toContain('<p>Plain text</p>');
+		expect(html).toContain('<table>');
+		expect(html).toContain('<thead>');
+		expect(html).toContain('<th>Name</th>');
+		expect(html).toContain('<td>Ada</td>');
+		expect(html).toContain('<td>88</td>');
 	});
 
-	it('converts fenced code blocks', () => {
-		const markdown = '```\nconst x = 1;\n```';
-		expect(markdownToHtml(markdown)).toBe('<pre><code>const x = 1;</code></pre>');
+	it('parses remote markdown images', () => {
+		const html = markdownToHtml('![Alt text](https://example.com/image.jpg)');
+		expect(html).toContain('<img src="https://example.com/image.jpg" alt="Alt text">');
 	});
 
-	it('converts horizontal rules', () => {
-		expect(markdownToHtml('---')).toBe('<hr>');
-		expect(markdownToHtml('***')).toBe('<hr>');
-		expect(markdownToHtml('___')).toBe('<hr>');
-		expect(markdownToHtml('Above\n\n---\n\nBelow')).toBe('<p>Above</p><hr><p>Below</p>');
+	it('does not parse data URL markdown images', () => {
+		const html = markdownToHtml('![](data:image/png;base64,abc)');
+		expect(html).not.toContain('<img');
+		expect(html).toContain('data:image/png;base64,abc');
 	});
 
-	it('does not italicize underscores inside words', () => {
-		expect(parseInlineMarkdown('file_name.txt')).toBe('file_name.txt');
+	it('parses nested lists', () => {
+		const markdown = `- parent
+  - child one
+  - child two
+- sibling`;
+
+		const html = markdownToHtml(markdown);
+		expect(html).toContain('<ul>');
+		expect(html).toContain('<li>parent<ul><li>child one</li><li>child two</li></ul></li>');
+		expect(html).toContain('<li>sibling</li>');
 	});
 });

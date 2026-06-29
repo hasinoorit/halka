@@ -25,20 +25,37 @@ export const PLUGINS: PluginDoc[] = [
 	{
 		slug: 'history',
 		title: 'History',
-		description: 'Undo/redo with automatic change grouping.',
-		importPath: "import { historyPlugin } from 'halka/plugins/history';",
+		description: 'Hybrid action + diff undo/redo with bounded memory and selection restore.',
+		importPath: "import { historyPlugin, createHistoryPlugin } from 'halka/plugins/history';",
 		commands: [
 			{ name: 'history.undo', description: 'Undo the last change' },
-			{ name: 'history.redo', description: 'Redo the last undone change' }
+			{ name: 'history.redo', description: 'Redo the last undone change' },
+			{ name: 'history.clear', description: 'Clear undo and redo stacks' },
+			{ name: 'history.suspend', description: 'Pause history recording' },
+			{ name: 'history.resume', description: 'Resume history recording' },
+			{ name: 'history.beginBatch', description: 'Group subsequent edits into one undo step' },
+			{ name: 'history.endBatch', description: 'Commit the current batch as one undo step' }
 		],
+		states: [
+			{ name: 'history.canUndo', description: 'Whether undo is available' },
+			{ name: 'history.canRedo', description: 'Whether redo is available' },
+			{ name: 'history.stackDepth', description: 'Number of committed undo steps' }
+		],
+		stateExample: `const canUndo = editor.getState('history.canUndo');
+const depth = editor.getState('history.stackDepth');`,
 		shortcuts: [
 			{ keys: 'Mod+Z', action: 'Undo' },
 			{ keys: 'Mod+Shift+Z / Mod+Y', action: 'Redo' }
 		],
 		usageTips: [
 			'Add historyPlugin to your plugins array — undo/redo work automatically',
-			'Changes are grouped so rapid typing produces one undo step'
-		]
+			'Typing is grouped into one undo step after 5 seconds idle or on blur',
+			'Paste and command edits commit immediately as single steps',
+			'Configure with createHistoryPlugin({ maxSteps: 100, mergeMs: 5000 })',
+			'Undo/redo restore both document content and cursor selection'
+		],
+		notes:
+			'History stores action/diff payloads (not full HTML snapshots). Cap defaults to 100 steps (FIFO).'
 	},
 	{
 		slug: 'link',
@@ -198,10 +215,12 @@ const layout = inferImageLayout(imgElement, editor.root);`,
     rowSpan: number;
     isMerged: boolean;
   } | null;
+  canMerge: boolean;
 } | null;
 
 const inTable = tableActive !== null;
 const canSplitCell = tableActive?.cell?.isMerged ?? false;
+const canMergeCells = tableActive?.canMerge ?? false;
 
 editor.on('formatChange', () => {
   const active = editor.getState('table.active');
@@ -210,7 +229,7 @@ editor.on('formatChange', () => {
 			'Insert table with row/column count and optional header row',
 			'Add/remove rows and columns when cursor is in a cell',
 			'Merge cells with multi-cell selection; split only works on merged cells',
-			'Read table.active on formatChange to drive table toolbar (split when cell.isMerged)'
+			'Read table.active on formatChange to drive a floating table toolbar (canMerge, cell.isMerged)'
 		],
 		example: `editor.execCommand('table.insert', {
   rows: 3, columns: 4, header: true
@@ -226,6 +245,7 @@ editor.on('formatChange', () => {
 		commands: [
 			{ name: 'footnote.addItem', description: 'Add footnote HTML' },
 			{ name: 'footnote.insertCitation', description: 'Insert citation at cursor' },
+			{ name: 'footnote.normalize', description: 'Normalize imported footnote HTML structure' },
 			{ name: 'footnote.editItem / footnote.removeItem', description: 'Edit or remove' }
 		],
 		states: [{ name: 'footnote.items', description: 'Array of { id, content }' }],
@@ -244,7 +264,9 @@ editor.on('formatChange', () => {
 });`,
 		usageTips: [
 			'Add footnote bodies with footnote.addItem',
-			'Insert citation at cursor — auto-numbered superscript',
+			'Insert citation at cursor — produces <sup data-footnote-citation><a href="#fn-…">[n]</a></sup>',
+			'Footnote list is <ol data-footnote-list data-protected contenteditable="false">; styles come from CSS',
+			'Imported/pasted footnotes are normalized automatically; call footnote.normalize after setHTML if needed',
 			'Read footnote.items state to build a footnote manager UI',
 			'See /docs/svelte-ui for the in-repo FootnoteManager component'
 		],
@@ -255,14 +277,26 @@ editor.execCommand('footnote.insertCitation', items[0].id);`
 	{
 		slug: 'paste',
 		title: 'Paste',
-		description: 'Sanitizes pasted HTML automatically.',
+		description: 'Sanitizes pasted HTML and converts plain-text markdown on paste.',
 		importPath: "import { pastePlugin } from 'halka/plugins/paste';",
 		usageTips: [
-			'No commands — intercepts paste events automatically',
-			'Paste from Word/Google Docs — disallowed tags are stripped',
-			'Plain text paste creates one paragraph per line'
+			'Call pastePlugin() — intercepts paste events automatically',
+			'HTML paste preserves tables, images (remote URLs), links, lists, and trusted embeds',
+			'Plain text is parsed as markdown (headings, lists, tables, code blocks, etc.)',
+			'Pass onImageUpload to upload clipboard screenshots and data-URL images',
+			'Word/Google Docs HTML is normalized before sanitization'
 		],
-		notes: 'No commands — intercepts paste events. Plain text is wrapped in paragraphs.'
+		example: `pastePlugin({
+  onImageUpload: async (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const { url } = await res.json();
+    return url;
+  }
+})`,
+		notes:
+			'Trusted iframe embeds (YouTube, Vimeo) are preserved with a sandbox attribute. Remote image URLs are kept; data URLs require onImageUpload.'
 	},
 	{
 		slug: 'placeholder',

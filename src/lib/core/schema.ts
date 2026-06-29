@@ -28,8 +28,10 @@ export const defaultSchema: SchemaSpec = {
 		'BLOCKQUOTE',
 		'PRE',
 		'TABLE',
+		'CAPTION',
 		'TBODY',
 		'THEAD',
+		'TFOOT',
 		'TR',
 		'TD',
 		'TH'
@@ -48,10 +50,11 @@ export const defaultSchema: SchemaSpec = {
 		'SUP',
 		'S',
 		'STRIKE',
+		'DEL',
 		'SMALL',
 		'IMG'
 	]),
-	voids: new Set(['IMG', 'BR', 'HR', 'INPUT'])
+	voids: new Set(['IMG', 'BR', 'HR', 'INPUT', 'IFRAME'])
 };
 
 export class Schema {

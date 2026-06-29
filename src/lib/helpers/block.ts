@@ -16,6 +16,10 @@ export function isEmptyBlock(block: HTMLElement): boolean {
 	const text = block.textContent ?? '';
 	if (text.includes('\u00A0')) return false;
 
+	if (block.querySelector('img, iframe, video, audio')) {
+		return false;
+	}
+
 	if (isEmpty(block)) return true;
 	return (
 		block.childNodes.length === 1 &&

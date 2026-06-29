@@ -43,7 +43,7 @@ const root = document.getElementById('editor')!;
 const editor = new HalkaEditor(root, {
   plugins: [
     historyPlugin,
-    pastePlugin,
+    pastePlugin(),
     linkPlugin,
     listPlugin,
     imagePlugin,
@@ -57,11 +57,31 @@ const editor = new HalkaEditor(root, {
 
 editor.setHTML('<p>Hello world</p>');
 
-editor.on('change', (html) => {
+editor.on('change', (data) => {
+  const html = typeof data === 'string' ? data : data.html;
   console.log('Content changed:', html);
 });
 
 editor.destroy();
+```
+
+### History
+
+`historyPlugin` uses a hybrid **action + diff** undo stack (not full HTML snapshots):
+
+- Up to **100** undo steps (FIFO eviction)
+- **5 second** typing debounce — idle typing merges into one step; blur commits pending edits
+- Paste and `insertHTML` / `insertText` commit immediately
+- Undo/redo restore **selection** as well as content
+- Configure: `createHistoryPlugin({ maxSteps: 100, mergeMs: 5000 })`
+- States: `history.canUndo`, `history.canRedo`, `history.stackDepth`
+
+```ts
+import { createHistoryPlugin } from 'halka/plugins/history';
+
+const editor = new HalkaEditor(root, {
+  plugins: [createHistoryPlugin({ mergeMs: 5000 })]
+});
 ```
 
 ## Documentation

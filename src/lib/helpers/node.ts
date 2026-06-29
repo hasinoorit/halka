@@ -59,6 +59,8 @@ const isSelfClosing = (node: Node): boolean => {
 };
 
 const isEmpty = (node: Node): boolean => {
+	if (isSelfClosing(node)) return false;
+
 	if (!('hasChildNodes' in node) || !node.hasChildNodes()) return true;
 
 	return Array.from(node.childNodes).every((child) => {

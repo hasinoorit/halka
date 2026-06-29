@@ -30,7 +30,7 @@ import &#123; historyPlugin &#125; from 'halka/plugins/history';
 import &#123; pastePlugin &#125; from 'halka/plugins/paste';
 
 const editor = new HalkaEditor(document.getElementById('editor')!, &#123;
-  plugins: [historyPlugin, pastePlugin]
+  plugins: [historyPlugin, pastePlugin()]
 &#125;);
 editor.setHTML('&lt;p&gt;Hello world&lt;/p&gt;');
 		</CodeExample>

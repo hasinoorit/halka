@@ -1,281 +1,437 @@
 import type { Editor, HalkaPlugin, CommandHandler } from '../core/editor.js';
 
 export interface FootnoteItem {
-    id: string;
-    content: string; // HTML content
+	id: string;
+	content: string; // HTML content
 }
 
 declare module '../core/editor.js' {
-    interface EditorCommandMap {
-        'footnote.addItem': string; // HTML content
-        'footnote.removeItem': string; // id
-        'footnote.moveItem': { id: string; index: number };
-        'footnote.editItem': { id: string; content: string };
-        'footnote.insertCitation': string; // footnoteId
-    }
-    interface EditorStateMap {
-        'footnote.items': FootnoteItem[];
-    }
-    interface EditorStatePayloadMap {
-        'footnote.items': never;
-    }
+	interface EditorCommandMap {
+		'footnote.addItem': string; // HTML content
+		'footnote.removeItem': string; // id
+		'footnote.moveItem': { id: string; index: number };
+		'footnote.editItem': { id: string; content: string };
+		'footnote.insertCitation': string; // footnoteId
+		'footnote.normalize': void;
+	}
+	interface EditorStateMap {
+		'footnote.items': FootnoteItem[];
+	}
+	interface EditorStatePayloadMap {
+		'footnote.items': never;
+	}
 }
 
-const LIST_ATTR = 'data-footnote-list';
-const ITEM_ID_ATTR = 'data-footnote-item-id';
-const CITATION_ATTR = 'data-footnote-citation';
-const BACKLINKS_ATTR = 'data-footnote-backlinks';
+export const LIST_ATTR = 'data-footnote-list';
+/** @deprecated Read for legacy content; new footnotes use `li.id` only. */
+export const ITEM_ID_ATTR = 'data-footnote-item-id';
+export const CITATION_ATTR = 'data-footnote-citation';
+export const BACKLINKS_ATTR = 'data-footnote-backlinks';
+
+const FOOTNOTE_STYLE_ID = 'halka-footnote-styles';
+const ZERO_WIDTH_CHARS = /[\uFEFF\u200B]/g;
+
+const FOOTNOTE_CSS = `
+sup[${CITATION_ATTR}]>a{text-decoration:none;color:inherit}
+[${BACKLINKS_ATTR}]{margin-right:.5em;font-size:.8em}
+[${BACKLINKS_ATTR}]>a{text-decoration:none;color:inherit;opacity:.6}
+`.trim();
+
+const generateId = (): string => 'fn-' + Math.random().toString(36).substring(2, 11);
+
+const generateCitationId = (): string => `citation-${generateId()}`;
+
+const injectFootnoteStyles = (doc: Document): void => {
+	if (doc.getElementById(FOOTNOTE_STYLE_ID)) return;
+
+	const style = doc.createElement('style');
+	style.id = FOOTNOTE_STYLE_ID;
+	style.textContent = FOOTNOTE_CSS;
+	doc.head.appendChild(style);
+};
+
+const getFootnoteId = (li: HTMLLIElement): string =>
+	li.id || li.getAttribute(ITEM_ID_ATTR) || '';
+
+const findListItem = (list: HTMLOListElement, id: string): HTMLLIElement | null => {
+	for (const child of list.children) {
+		if (child.tagName !== 'LI') continue;
+		const li = child as HTMLLIElement;
+		if (getFootnoteId(li) === id) return li;
+	}
+	return null;
+};
+
+const unwrapCitationLink = (sup: HTMLElement): HTMLAnchorElement | null => {
+	const directLink = sup.querySelector(':scope > a');
+	if (directLink) {
+		const wrapper = sup.querySelector(':scope > span');
+		wrapper?.remove();
+		return directLink;
+	}
+
+	const wrappedLink = sup.querySelector(':scope > span a');
+	if (wrappedLink) {
+		sup.replaceChildren(wrappedLink);
+		return wrappedLink;
+	}
+
+	return null;
+};
+
+const ensureCitationLink = (
+	editor: Editor,
+	sup: HTMLElement,
+	footnoteId: string,
+	index: number
+): HTMLAnchorElement => {
+	let link = unwrapCitationLink(sup);
+
+	if (!link) {
+		link = editor.createEl('a');
+		sup.appendChild(link);
+	}
+
+	link.removeAttribute('style');
+	link.href = `#${footnoteId}`;
+	link.textContent = `[${index}]`;
+
+	return link;
+};
+
+const normalizeCitation = (
+	editor: Editor,
+	sup: HTMLElement,
+	footnoteId: string,
+	index: number
+): void => {
+	if (!sup.id) {
+		sup.id = generateCitationId();
+	}
+
+	sup.setAttribute(CITATION_ATTR, footnoteId);
+	sup.setAttribute('contenteditable', 'false');
+	sup.removeAttribute('style');
+	ensureCitationLink(editor, sup, footnoteId, index);
+};
+
+const ensureListStructure = (list: HTMLOListElement): void => {
+	list.setAttribute(LIST_ATTR, '');
+	list.setAttribute('data-protected', 'true');
+	list.setAttribute('contenteditable', 'false');
+};
+
+const ensureListItemStructure = (li: HTMLLIElement): string => {
+	let footnoteId = getFootnoteId(li);
+
+	if (!footnoteId) {
+		footnoteId = generateId();
+	}
+
+	li.id = footnoteId;
+	li.removeAttribute(ITEM_ID_ATTR);
+	return footnoteId;
+};
+
+const createCitationElement = (
+	editor: Editor,
+	footnoteId: string,
+	index: number
+): HTMLElement => {
+	const sup = editor.createEl('sup');
+	sup.id = generateCitationId();
+	sup.setAttribute(CITATION_ATTR, footnoteId);
+	sup.setAttribute('contenteditable', 'false');
+
+	const link = editor.createEl('a');
+	link.href = `#${footnoteId}`;
+	link.textContent = `[${index}]`;
+	sup.appendChild(link);
+
+	return sup;
+};
+
+const createBacklinkContainer = (editor: Editor): HTMLElement => {
+	const container = editor.createEl('span');
+	container.setAttribute(BACKLINKS_ATTR, '');
+	return container;
+};
+
+const stripFootnoteArtifacts = (root: HTMLElement): void => {
+	root.querySelectorAll(`sup[${CITATION_ATTR}] a, [${BACKLINKS_ATTR}], [${BACKLINKS_ATTR}] a`).forEach((node) => {
+		node.removeAttribute('style');
+	});
+
+	root.querySelectorAll(`[${BACKLINKS_ATTR}]`).forEach((node) => {
+		node.removeAttribute('contenteditable');
+	});
+
+	const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+	let textNode = walker.nextNode() as Text | null;
+	while (textNode) {
+		if (ZERO_WIDTH_CHARS.test(textNode.data)) {
+			textNode.data = textNode.data.replace(ZERO_WIDTH_CHARS, '');
+		}
+		textNode = walker.nextNode() as Text | null;
+	}
+};
 
 export const footnotePlugin: HalkaPlugin = (editor: Editor) => {
-    const getList = (root: HTMLElement = editor.root): HTMLOListElement | null => {
-        return root.querySelector(`ol[${LIST_ATTR}="true"]`);
-    };
+	injectFootnoteStyles(editor.root.ownerDocument);
 
-    const generateId = (): string => {
-        return 'fn-' + Math.random().toString(36).substring(2, 11);
-    };
+	const getList = (root: HTMLElement = editor.root): HTMLOListElement | null =>
+		root.querySelector(`ol[${LIST_ATTR}]`);
 
-    const syncCitations = (root: HTMLElement = editor.root) => {
-        const list = getList(root);
-        const items = list ? Array.from(list.children) : [];
-        const idToIndex = new Map<string, number>();
+	let syncing = false;
 
-        items.forEach((li, idx) => {
-            const id = li.getAttribute(ITEM_ID_ATTR);
-            if (id) idToIndex.set(id, idx + 1);
-        });
+	const syncCitations = (root: HTMLElement = editor.root) => {
+		if (syncing) return;
+		syncing = true;
 
-        const citationsByFootnote = new Map<string, HTMLElement[]>();
-        const allCitations = root.querySelectorAll(`sup[${CITATION_ATTR}]`);
+		try {
+			stripFootnoteArtifacts(root);
 
-        allCitations.forEach((sup) => {
-            const footnoteId = sup.getAttribute(CITATION_ATTR);
-            if (!footnoteId) return;
+			const list = getList(root);
+			const items = list ? Array.from(list.children).filter((node) => node.tagName === 'LI') : [];
+			const idToIndex = new Map<string, number>();
 
-            const index = idToIndex.get(footnoteId);
-            if (index === undefined) {
-                sup.remove();
-            } else {
-                if (!citationsByFootnote.has(footnoteId)) {
-                    citationsByFootnote.set(footnoteId, []);
-                }
-                citationsByFootnote.get(footnoteId)!.push(sup as HTMLElement);
+			if (list) {
+				ensureListStructure(list);
+			}
 
-                const a = sup.querySelector('a');
-                if (a) {
-                    a.textContent = `[${index}]`;
-                    a.href = `#${footnoteId}`;
-                }
-            }
-        });
+			items.forEach((node, idx) => {
+				const li = node as HTMLLIElement;
+				const id = ensureListItemStructure(li);
+				idToIndex.set(id, idx + 1);
+			});
 
-        if (!list) return;
+			const citationsByFootnote = new Map<string, HTMLElement[]>();
+			const allCitations = root.querySelectorAll(`sup[${CITATION_ATTR}]`);
 
-        items.forEach((li) => {
-            const footnoteId = li.getAttribute(ITEM_ID_ATTR);
-            if (!footnoteId) return;
+			allCitations.forEach((node) => {
+				const sup = node as HTMLElement;
+				const footnoteId = sup.getAttribute(CITATION_ATTR);
+				if (!footnoteId) return;
 
-            const citations = citationsByFootnote.get(footnoteId) || [];
+				const index = idToIndex.get(footnoteId);
+				if (index === undefined) {
+					sup.remove();
+					return;
+				}
 
-            let backLinkContainer = li.querySelector(`[${BACKLINKS_ATTR}]`) as HTMLElement | null;
-            if (!backLinkContainer) {
-                backLinkContainer = editor.createEl('span');
-                backLinkContainer.setAttribute(BACKLINKS_ATTR, 'true');
-                backLinkContainer.setAttribute('contenteditable', 'false');
-                backLinkContainer.style.marginRight = '8px';
-                backLinkContainer.style.fontSize = '0.8em';
-                li.insertBefore(backLinkContainer, li.firstChild);
-            }
+				if (!citationsByFootnote.has(footnoteId)) {
+					citationsByFootnote.set(footnoteId, []);
+				}
+				citationsByFootnote.get(footnoteId)!.push(sup);
+				normalizeCitation(editor, sup, footnoteId, index);
+			});
 
-            backLinkContainer.innerHTML = '';
+			if (!list) return;
 
-            if (citations.length > 0) {
-                citations.forEach((sup, idx) => {
-                    const backLink = editor.createEl('a');
-                    backLink.href = `#${sup.id}`;
-                    backLink.textContent = citations.length > 1 ? ` [\u21e7${idx + 1}]` : ' [\u21e7]';
-                    backLink.style.textDecoration = 'none';
-                    backLink.style.color = 'inherit';
-                    backLink.style.opacity = '0.6';
-                    backLinkContainer!.appendChild(backLink);
-                });
-            }
-        });
-    };
+			items.forEach((node) => {
+				const li = node as HTMLLIElement;
+				const footnoteId = getFootnoteId(li);
+				if (!footnoteId) return;
 
-    const getFootnoteItems = (): FootnoteItem[] => {
-        const list = getList();
-        if (!list) return [];
+				const citations = citationsByFootnote.get(footnoteId) || [];
 
-        const items: FootnoteItem[] = [];
-        Array.from(list.children).forEach((li) => {
-            if (li.tagName === 'LI') {
-                const id = li.getAttribute(ITEM_ID_ATTR) || '';
-                if (id) {
-                    const clone = li.cloneNode(true) as HTMLElement;
-                    const backLinkContainer = clone.querySelector(`[${BACKLINKS_ATTR}]`);
-                    if (backLinkContainer) {
-                        backLinkContainer.remove();
-                    }
+				let backLinkContainer = li.querySelector(`[${BACKLINKS_ATTR}]`) as HTMLElement | null;
+				if (!backLinkContainer) {
+					backLinkContainer = createBacklinkContainer(editor);
+					li.insertBefore(backLinkContainer, li.firstChild);
+				}
 
-                    items.push({
-                        id,
-                        content: clone.innerHTML
-                    });
-                }
-            }
-        });
-        return items;
-    };
+				backLinkContainer.removeAttribute('style');
+				backLinkContainer.removeAttribute('contenteditable');
+				backLinkContainer.innerHTML = '';
 
-    const addFootnoteItem: CommandHandler<'footnote.addItem'> = (htmlContent) => {
-        if (typeof htmlContent !== 'string') return;
+				citations.forEach((sup, idx) => {
+					if (!sup.id) {
+						sup.id = generateCitationId();
+					}
 
-        editor.runTransaction(() => {
-            let list = getList(editor.root);
-            if (!list) {
-                list = editor.createEl('ol');
-                list.setAttribute(LIST_ATTR, 'true');
-                list.setAttribute('data-protected', 'true');
-                list.setAttribute('contenteditable', 'false');
-                editor.root.appendChild(list);
-            }
+					const backLink = editor.createEl('a');
+					backLink.href = `#${sup.id}`;
+					backLink.textContent = citations.length > 1 ? ` [\u21e7${idx + 1}]` : ' [\u21e7]';
+					backLinkContainer!.appendChild(backLink);
+				});
+			});
+		} finally {
+			syncing = false;
+		}
+	};
 
-            const li = editor.createEl('li');
-            const id = generateId();
-            li.id = id;
-            li.setAttribute(ITEM_ID_ATTR, id);
-            li.innerHTML = htmlContent;
-            list.appendChild(li);
+	const getFootnoteItems = (): FootnoteItem[] => {
+		syncCitations();
+		const list = getList();
+		if (!list) return [];
 
-            syncCitations();
-        });
-    };
+		const items: FootnoteItem[] = [];
+		Array.from(list.children).forEach((li) => {
+			if (li.tagName !== 'LI') return;
 
-    const removeFootnoteItem: CommandHandler<'footnote.removeItem'> = (id) => {
-        if (typeof id !== 'string') return;
+			const id = getFootnoteId(li as HTMLLIElement);
+			if (!id) return;
 
-        editor.runTransaction(() => {
-            const list = getList(editor.root);
-            if (!list) return;
+			const clone = li.cloneNode(true) as HTMLElement;
+			clone.querySelector(`[${BACKLINKS_ATTR}]`)?.remove();
 
-            const item = list.querySelector(`li[${ITEM_ID_ATTR}="${id}"]`);
-            if (item) {
-                item.remove();
-            }
+			items.push({
+				id,
+				content: clone.innerHTML
+			});
+		});
+		return items;
+	};
 
-            if (list.children.length === 0) {
-                list.remove();
-            }
+	const addFootnoteItem: CommandHandler<'footnote.addItem'> = (htmlContent) => {
+		if (typeof htmlContent !== 'string') return;
 
-            syncCitations();
-        });
-    };
+		editor.runTransaction(() => {
+			let list = getList(editor.root);
+			if (!list) {
+				list = editor.createEl('ol');
+				ensureListStructure(list);
+				editor.root.appendChild(list);
+			}
 
-    const moveFootnoteItemAt: CommandHandler<'footnote.moveItem'> = (payload) => {
-        if (!payload) return;
-        const { id, index } = payload;
+			const li = editor.createEl('li');
+			const id = generateId();
+			li.id = id;
+			li.innerHTML = htmlContent;
+			list.appendChild(li);
 
-        editor.runTransaction(() => {
-            const list = getList(editor.root);
-            if (!list) return;
+			syncCitations();
+		});
+	};
 
-            const item = list.querySelector(`li[${ITEM_ID_ATTR}="${id}"]`);
-            if (!item) return;
+	const removeFootnoteItem: CommandHandler<'footnote.removeItem'> = (id) => {
+		if (typeof id !== 'string') return;
 
-            if (index < 0 || index >= list.children.length) return;
+		editor.runTransaction(() => {
+			const list = getList(editor.root);
+			if (!list) return;
 
-            const items = Array.from(list.children);
-            const currentIndex = items.indexOf(item);
+			findListItem(list, id)?.remove();
 
-            if (currentIndex === index) return;
+			if (list.children.length === 0) {
+				list.remove();
+			}
 
-            if (index >= items.length - 1) {
-                list.appendChild(item);
-            } else {
-                if (currentIndex < index) {
-                    list.insertBefore(item, items[index + 1]);
-                } else {
-                    list.insertBefore(item, items[index]);
-                }
-            }
+			syncCitations();
+		});
+	};
 
-            syncCitations();
-        });
-    };
+	const moveFootnoteItemAt: CommandHandler<'footnote.moveItem'> = (payload) => {
+		if (!payload) return;
+		const { id, index } = payload;
 
-    const editItem: CommandHandler<'footnote.editItem'> = (payload) => {
-        if (!payload) return;
-        const { id, content } = payload;
+		editor.runTransaction(() => {
+			const list = getList(editor.root);
+			if (!list) return;
 
-        editor.runTransaction(() => {
-            const list = getList(editor.root);
-            if (!list) return;
+			const item = findListItem(list, id);
+			if (!item) return;
 
-            const item = list.querySelector(`li[${ITEM_ID_ATTR}="${id}"]`) as HTMLLIElement;
-            if (item) {
-                const backLinkContainer = item.querySelector(`[${BACKLINKS_ATTR}]`);
-                item.innerHTML = content;
-                if (backLinkContainer) {
-                    item.prepend(backLinkContainer);
-                }
-                syncCitations();
-            }
-        });
-    };
+			if (index < 0 || index >= list.children.length) return;
 
-    const insertFootnoteCitation: CommandHandler<'footnote.insertCitation'> = (footnoteId) => {
-        if (typeof footnoteId !== 'string') return;
+			const items = Array.from(list.children);
+			const currentIndex = items.indexOf(item);
 
-        editor.runTransaction((ed) => {
-            const list = getList(ed.root);
-            if (!list) return;
+			if (currentIndex === index) return;
 
-            const items = Array.from(list.children);
-            const index = items.findIndex((li) => li.getAttribute(ITEM_ID_ATTR) === footnoteId);
-            if (index === -1) return;
+			if (index >= items.length - 1) {
+				list.appendChild(item);
+			} else if (currentIndex < index) {
+				list.insertBefore(item, items[index + 1]);
+			} else {
+				list.insertBefore(item, items[index]);
+			}
 
-            const sup = editor.createEl('sup');
-            const citationId = `citation-${generateId()}`;
-            sup.id = citationId;
-            sup.setAttribute(CITATION_ATTR, footnoteId);
-            sup.setAttribute('contenteditable', 'false');
+			syncCitations();
+		});
+	};
 
-            const a = editor.createEl('a');
-            a.href = `#${footnoteId}`;
-            a.textContent = `[${index + 1}]`;
-            a.style.textDecoration = 'none';
-            a.style.color = 'inherit';
+	const editItem: CommandHandler<'footnote.editItem'> = (payload) => {
+		if (!payload) return;
+		const { id, content } = payload;
 
-            sup.appendChild(a);
+		editor.runTransaction(() => {
+			const list = getList(editor.root);
+			if (!list) return;
 
-            const range = ed.getRange();
-            range.deleteContents();
-            range.insertNode(sup);
+			const item = findListItem(list, id);
+			if (!item) return;
 
-            range.setStartAfter(sup);
-            range.collapse(true);
-            ed.setSelection(range);
+			const backLinkContainer = item.querySelector(`[${BACKLINKS_ATTR}]`);
+			item.innerHTML = content;
+			if (backLinkContainer) {
+				item.prepend(backLinkContainer);
+			}
 
-            syncCitations();
-        });
-    };
+			syncCitations();
+		});
+	};
 
-    editor.registerState('footnote.items', getFootnoteItems);
+	const insertFootnoteCitation: CommandHandler<'footnote.insertCitation'> = (footnoteId) => {
+		if (typeof footnoteId !== 'string') return;
 
-    editor.registerCommand('footnote.addItem', addFootnoteItem);
-    editor.registerCommand('footnote.removeItem', removeFootnoteItem);
-    editor.registerCommand('footnote.moveItem', moveFootnoteItemAt);
-    editor.registerCommand('footnote.editItem', editItem);
-    editor.registerCommand('footnote.insertCitation', insertFootnoteCitation);
+		editor.runTransaction((ed) => {
+			const list = getList(ed.root);
+			if (!list) return;
 
-    return () => {
-        editor.unregisterState('footnote.items', getFootnoteItems);
+			const items = Array.from(list.children);
+			const index = items.findIndex((li) => getFootnoteId(li as HTMLLIElement) === footnoteId);
+			if (index === -1) return;
 
-        editor.unregisterCommand('footnote.addItem', addFootnoteItem);
-        editor.unregisterCommand('footnote.removeItem', removeFootnoteItem);
-        editor.unregisterCommand('footnote.moveItem', moveFootnoteItemAt);
-        editor.unregisterCommand('footnote.editItem', editItem);
-        editor.unregisterCommand('footnote.insertCitation', insertFootnoteCitation);
-    };
+			const sup = createCitationElement(editor, footnoteId, index + 1);
+
+			const range = ed.getRange();
+			range.deleteContents();
+			range.insertNode(sup);
+
+			range.setStartAfter(sup);
+			range.collapse(true);
+			ed.setSelection(range);
+
+			syncCitations();
+		});
+	};
+
+	const normalizeFootnotes: CommandHandler<'footnote.normalize'> = () => {
+		editor.runTransaction(() => {
+			syncCitations();
+		});
+	};
+
+	const handleContentChange = () => {
+		if (getList() || editor.root.querySelector(`sup[${CITATION_ATTR}]`)) {
+			syncCitations();
+		}
+	};
+
+	editor.registerState('footnote.items', getFootnoteItems);
+
+	editor.registerCommand('footnote.addItem', addFootnoteItem);
+	editor.registerCommand('footnote.removeItem', removeFootnoteItem);
+	editor.registerCommand('footnote.moveItem', moveFootnoteItemAt);
+	editor.registerCommand('footnote.editItem', editItem);
+	editor.registerCommand('footnote.insertCitation', insertFootnoteCitation);
+	editor.registerCommand('footnote.normalize', normalizeFootnotes);
+
+	editor.on('change', handleContentChange);
+	syncCitations();
+
+	return () => {
+		editor.off('change', handleContentChange);
+
+		editor.unregisterState('footnote.items', getFootnoteItems);
+
+		editor.unregisterCommand('footnote.addItem', addFootnoteItem);
+		editor.unregisterCommand('footnote.removeItem', removeFootnoteItem);
+		editor.unregisterCommand('footnote.moveItem', moveFootnoteItemAt);
+		editor.unregisterCommand('footnote.editItem', editItem);
+		editor.unregisterCommand('footnote.insertCitation', insertFootnoteCitation);
+		editor.unregisterCommand('footnote.normalize', normalizeFootnotes);
+	};
 };

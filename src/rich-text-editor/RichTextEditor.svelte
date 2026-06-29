@@ -19,23 +19,32 @@
 	import FindReplace from './FindReplace.svelte';
 	import FootnoteManager from './FootnoteManager.svelte';
 	import Toolbar from './Toolbar.svelte';
+	import TableFloatingToolbar from './TableFloatingToolbar.svelte';
+	import type { TableActiveState } from 'halka/plugins/table';
+	import { colorStore } from '../components/color-picker/index.js';
 
 	interface Props {
 		content?: string;
 		class?: string;
 		placeholder?: string;
 		onChange?: (html: string) => void;
+		onImageUpload?: (file: File | Blob) => Promise<string>;
 	}
 
-	let { content = $bindable(''), class: className = '', placeholder, onChange = (html: string) => {} }: Props = $props();
+	let {
+		content = $bindable(''),
+		class: className = '',
+		placeholder,
+		onChange = (html: string) => {},
+		onImageUpload
+	}: Props = $props();
 
 	let editorElement = $state<HTMLElement>();
 	let editor = $state<HalkaEditor>();
 
 	let activeBlock = $state<string | null>(null);
 	let activeList = $state<'ul' | 'ol' | null>(null);
-	let isTableSelected = $state(false);
-	let canSplitTableCell = $state(false);
+	let tableActive = $state<TableActiveState | null>(null);
 
 	// Formatting States
 	let bold = $state(false);
@@ -55,6 +64,8 @@
 	let fontSize = $state('16px');
 	let fontFamily = $state('ui-sans-serif');
 	let textAlign = $state('left');
+	let canUndo = $state(false);
+	let canRedo = $state(false);
 
 	// Modal states
 	let showLinkModal = $state(false);
@@ -89,6 +100,13 @@
 		return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
 	}
 
+	function normalizeEditorColor(input: string | undefined, fallback: string): string {
+		if (!input) return fallback;
+		const value = input.trim();
+		if (value.startsWith('var(--colors-')) return value;
+		return rgbToHex(value) || fallback;
+	}
+
 	function refresh() {
 		if (!editor) return;
 		bold = editor.query.isActive('STRONG') || editor.query.isActive('B');
@@ -103,9 +121,7 @@
 
 		imageSelected = editor.getState('image.active') !== null;
 
-		const tableActive = editor.getState('table.active');
-		isTableSelected = tableActive !== null;
-		canSplitTableCell = tableActive?.cell?.isMerged ?? false;
+		tableActive = editor.getState('table.active') ?? null;
 
 		activeList = editor.getState('list.active')?.type ?? null;
 
@@ -115,11 +131,13 @@
 		} else {
 			activeBlock = null;
 		}
-		color = rgbToHex(editor.getStyle('color') || '') || '#000000';
-		backgroundColor = rgbToHex(editor.getStyle('background-color') || '') || '#ffffff';
+		color = normalizeEditorColor(editor.getStyle('color'), '#000000');
+		backgroundColor = normalizeEditorColor(editor.getStyle('background-color'), '#ffffff');
 		fontSize = editor.getStyle('font-size') || '16px';
 		fontFamily = (editor.getStyle('font-family') || 'ui-sans-serif').replace(/['"]/g, '');
 		textAlign = editor.getStyle('text-align') || 'left';
+		canUndo = editor.getState('history.canUndo') === true;
+		canRedo = editor.getState('history.canRedo') === true;
 	}
 
 	onMount(() => {
@@ -127,7 +145,7 @@
 			editor = new HalkaEditor(editorElement, {
 				plugins: [
 					historyPlugin,
-					pastePlugin,
+					pastePlugin(onImageUpload ? { onImageUpload } : {}),
 					linkPlugin,
 					listPlugin,
 					imagePlugin,
@@ -139,14 +157,16 @@
 				]
 			});
 			editor.setHTML(content);
-			editor.on('change', (html: any) => {
-				onChange?.(html ?? '');
+			editor.on('change', (data: any) => {
+				const html = typeof data === 'string' ? data : data?.html ?? '';
+				onChange?.(html);
 				if (content !== html) {
 					content = html;
 				}
 			});
 			editor.on('formatChange', refresh);
 			refresh();
+			colorStore.registerDocument(editor.root.ownerDocument);
 		}
 	});
 
@@ -161,6 +181,7 @@
 
 	onDestroy(() => {
 		if (editor) {
+			colorStore.unregisterDocument(editor.root.ownerDocument);
 			editor.destroy();
 		}
 	});
@@ -362,8 +383,6 @@
 			{editor}
 			{activeBlock}
 			{activeList}
-			{isTableSelected}
-			{canSplitTableCell}
 			{bold}
 			{italic}
 			{underline}
@@ -378,6 +397,8 @@
 			{fontSize}
 			{fontFamily}
 			{textAlign}
+			{canUndo}
+			{canRedo}
 			onUndo={undo}
 			onRedo={redo}
 			onSetStyle={setStyle}
@@ -393,18 +414,19 @@
 			onOpenFindReplace={openFindReplace}
 			onClearFormatting={clearFormatting}
 			onClearStyles={clearStyles}
-			onDeleteTable={deleteTable}
 		/>
 
 		<FindReplace {editor} bind:open={showFindReplace} onClose={closeFindReplace} />
 
-		<!-- Editor Area -->
-		<div
-			bind:this={editorElement}
-			class="halka-editor rte-editor-area"
-			style="font-family: ui-sans-serif, system-ui, sans-serif;"
-			contenteditable="true"
-		></div>
+		<div class="rte-editor-shell">
+			<div
+				bind:this={editorElement}
+				class="halka-editor rte-editor-area"
+				style="font-family: ui-sans-serif, system-ui, sans-serif;"
+				contenteditable="true"
+			></div>
+			<TableFloatingToolbar {editor} {tableActive} onDeleteTable={deleteTable} />
+		</div>
 	</CardContent>
 </Card>
 </div>

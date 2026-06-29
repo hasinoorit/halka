@@ -191,6 +191,22 @@ describe('tablePlugin', () => {
 		const selected = root.querySelectorAll('td.halka-selected-cell');
 		expect(selected.length).toBeGreaterThanOrEqual(2);
 
+		const table = root.querySelector('table') as HTMLTableElement;
+		const range = document.createRange();
+		range.selectNodeContents(table);
+		range.collapse(true);
+		editor.setSelection(range);
+
+		expect(editor.getState('table.active')).toEqual({
+			cell: {
+				tagName: 'TD',
+				colSpan: 1,
+				rowSpan: 1,
+				isMerged: false
+			},
+			canMerge: true
+		});
+
 		document.body.removeChild(root);
 		editor.destroy();
 	});
@@ -860,7 +876,8 @@ describe('tablePlugin', () => {
 				colSpan: 2,
 				rowSpan: 2,
 				isMerged: true
-			}
+			},
+			canMerge: false
 		});
 
 		document.body.removeChild(root);
@@ -884,7 +901,8 @@ describe('tablePlugin', () => {
 				colSpan: 1,
 				rowSpan: 1,
 				isMerged: false
-			}
+			},
+			canMerge: false
 		});
 
 		document.body.removeChild(root);

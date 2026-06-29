@@ -1,15 +1,17 @@
 <script lang="ts">
 	import type { HalkaEditor } from 'halka';
 	import Button from './ui/button.svelte';
-	import ColorPicker from './ui/color-picker.svelte';
+	import { ColorPicker } from '../components/color-picker/index.js';
 	import Dropdown from './ui/dropdown.svelte';
+
+	function preventEditorBlur(event: MouseEvent) {
+		event.preventDefault();
+	}
 
 	interface Props {
 		editor: HalkaEditor | undefined;
 		activeBlock: string | null;
 		activeList: 'ul' | 'ol' | null;
-		isTableSelected: boolean;
-		canSplitTableCell: boolean;
 		bold: boolean;
 		italic: boolean;
 		underline: boolean;
@@ -24,6 +26,8 @@
 		fontSize: string;
 		fontFamily: string;
 		textAlign: string;
+		canUndo: boolean;
+		canRedo: boolean;
 		onUndo: () => void;
 		onRedo: () => void;
 		onSetStyle: (property: string, value?: string) => void;
@@ -39,15 +43,12 @@
 		onOpenFindReplace: () => void;
 		onClearFormatting: () => void;
 		onClearStyles: () => void;
-		onDeleteTable: () => void;
 	}
 
 	let {
 		editor,
 		activeBlock,
 		activeList,
-		isTableSelected,
-		canSplitTableCell,
 		bold,
 		italic,
 		underline,
@@ -62,6 +63,8 @@
 		fontSize,
 		fontFamily,
 		textAlign,
+		canUndo,
+		canRedo,
 		onUndo,
 		onRedo,
 		onSetStyle,
@@ -76,15 +79,14 @@
 		onInsertFootnote,
 		onOpenFindReplace,
 		onClearFormatting,
-		onClearStyles,
-		onDeleteTable
+		onClearStyles
 	}: Props = $props();
 </script>
 
 <div class="rte-toolbar">
 	<!-- History -->
 	<div class="rte-toolbar-group">
-		<Button variant="ghost" size="icon" className="rte-btn--icon" onclick={onUndo} title="Undo">
+		<Button variant="ghost" size="icon" className="rte-btn--icon" onclick={onUndo} title="Undo" disabled={!canUndo}>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				width="16"
@@ -98,7 +100,7 @@
 				><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" /></svg
 			>
 		</Button>
-		<Button variant="ghost" size="icon" className="rte-btn--icon" onclick={onRedo} title="Redo">
+		<Button variant="ghost" size="icon" className="rte-btn--icon" onclick={onRedo} title="Redo" disabled={!canRedo}>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				width="16"
@@ -393,48 +395,71 @@
 	</div>
 
 	<!-- Colors -->
-	<div class="rte-toolbar-group">
+	<div class="rte-toolbar-group rte-toolbar-group--colors">
 		<ColorPicker
 			value={color}
-			label="T"
-			className="rte-btn--icon"
-			onSelectColor={(c) => onSetStyle('color', c)}
-			onClearColor={() => onSetStyle('color')}
+			onchange={(c) => onSetStyle('color', c)}
+			onReset={() => onSetStyle('color')}
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="1.2rem"
-				height="1.2rem"
-				viewBox="0 0 24 24"
-				fill="none"
-			>
-				<path
-					d="M6 18L10.8 6h2.4L18 18h-2.2l-1.2-3.5H9.4L8.2 18H6zm4.1-5.5h3.8L12 7.8l-1.9 4.7z"
-					fill="currentColor"
-				/>
-				<rect x="4" y="20" width="16" height="3" rx="0.5" fill={color} />
-			</svg>
+			{#snippet children({ toggle, isOpen, displayColor })}
+				<Button
+					variant="ghost"
+					size="icon"
+					className="rte-btn--icon"
+					title="Text color"
+					aria-expanded={isOpen}
+					onclick={toggle}
+					onmousedown={preventEditorBlur}
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						aria-hidden="true"
+					>
+						<path
+							d="M6 18L10.8 6h2.4L18 18h-2.2l-1.2-3.5H9.4L8.2 18H6zm4.1-5.5h3.8L12 7.8l-1.9 4.7z"
+							fill="currentColor"
+						/>
+						<rect x="4" y="20" width="16" height="3" rx="0.5" fill={displayColor} />
+					</svg>
+				</Button>
+			{/snippet}
 		</ColorPicker>
 		<ColorPicker
-			className="rte-btn--icon"
 			value={backgroundColor}
-			onSelectColor={(c) => onSetStyle('background-color', c)}
-			onClearColor={() => onSetStyle('background-color')}
+			onchange={(c) => onSetStyle('background-color', c)}
+			onReset={() => onSetStyle('background-color')}
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="1.2rem"
-				height="1.2rem"
-				viewBox="0 0 24 24"
-				fill="none"
-			>
-				<rect x="3" y="11" width="18" height="8" rx="1" fill="currentColor" opacity="0.25" />
-				<path
-					d="M6 18L10.8 6h2.4L18 18h-2.2l-1.2-3.5H9.4L8.2 18H6zm4.1-5.5h3.8L12 7.8l-1.9 4.7z"
-					fill="currentColor"
-				/>
-				<rect x="4" y="20" width="16" height="3" rx="0.5" fill={backgroundColor} />
-			</svg>
+			{#snippet children({ toggle, isOpen, displayColor })}
+				<Button
+					variant="ghost"
+					size="icon"
+					className="rte-btn--icon"
+					title="Background color"
+					aria-expanded={isOpen}
+					onclick={toggle}
+					onmousedown={preventEditorBlur}
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						aria-hidden="true"
+					>
+						<rect x="3" y="11" width="18" height="8" rx="1" fill="currentColor" opacity="0.25" />
+						<path
+							d="M6 18L10.8 6h2.4L18 18h-2.2l-1.2-3.5H9.4L8.2 18H6zm4.1-5.5h3.8L12 7.8l-1.9 4.7z"
+							fill="currentColor"
+						/>
+						<rect x="4" y="20" width="16" height="3" rx="0.5" fill={displayColor} />
+					</svg>
+				</Button>
+			{/snippet}
 		</ColorPicker>
 	</div>
 
@@ -740,198 +765,5 @@
 				/><path d="M8 11h6" /></svg
 			>
 		</Button>
-
-		{#if isTableSelected}
-			<Dropdown
-				trigger={tableActionsTrigger}
-				items={[
-					{
-						label: 'Insert Row Above',
-						onclick: () => editor?.execCommand('table.addRow', false),
-						icon: rowAboveIcon
-					},
-					{
-						label: 'Insert Row Below',
-						onclick: () => editor?.execCommand('table.addRow', true),
-						icon: rowBelowIcon
-					},
-					{
-						label: 'Insert Column Left',
-						onclick: () => editor?.execCommand('table.addColumn', false),
-						icon: colLeftIcon
-					},
-					{
-						label: 'Insert Column Right',
-						onclick: () => editor?.execCommand('table.addColumn', true),
-						icon: colRightIcon
-					},
-					{
-						label: 'Merge Cells',
-						onclick: () => editor?.execCommand('table.mergeCells'),
-						icon: mergeIcon
-					},
-					{
-						label: 'Split Cell',
-						onclick: () => editor?.execCommand('table.splitCell'),
-						icon: splitIcon,
-						disabled: !canSplitTableCell
-					},
-					{
-						label: 'Delete Row',
-						onclick: () => editor?.execCommand('table.removeRow'),
-						variant: 'destructive',
-						icon: deleteIcon
-					},
-					{
-						label: 'Delete Column',
-						onclick: () => editor?.execCommand('table.removeColumn'),
-						variant: 'destructive',
-						icon: deleteIcon
-					},
-					{
-						label: 'Delete Table',
-						onclick: onDeleteTable,
-						variant: 'destructive',
-						icon: deleteIcon
-					}
-				]}
-			/>
-		{/if}
 	</div>
 </div>
-
-{#snippet tableActionsTrigger()}
-	<Button variant="secondary" size="sm" className="rte-btn--table-trigger">
-		Table
-		<svg
-			xmlns="http://www.w3.org/2000/svg"
-			width="12"
-			height="12"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg
-		>
-	</Button>
-{/snippet}
-
-{#snippet rowAboveIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><path d="M3 15h18" /><path
-			d="M3 9h18"
-		/><path d="M21 9v6" /><path d="M3 9v6" /><path d="M12 9v6" /></svg
-	>
-{/snippet}
-
-{#snippet rowBelowIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><path d="M3 15h18" /><path
-			d="M3 9h18"
-		/><path d="M12 9v6" /></svg
-	>
-{/snippet}
-
-{#snippet colLeftIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><path d="M15 3v18" /><path
-			d="M9 3v18"
-		/><path d="M9 3h6" /><path d="M9 21h6" /><path d="M9 12h6" /></svg
-	>
-{/snippet}
-
-{#snippet colRightIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><path d="M15 3v18" /><path
-			d="M9 3v18"
-		/><path d="M9 12h6" /></svg
-	>
-{/snippet}
-
-{#snippet mergeIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 12h18" /><path
-			d="M12 3v18"
-		/></svg
-	>
-{/snippet}
-
-{#snippet splitIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M12 3v18" /><path
-			d="M8 12h-2"
-		/><path d="M16 12h2" /></svg
-	>
-{/snippet}
-
-{#snippet deleteIcon()}
-	<svg
-		xmlns="http://www.w3.org/2000/svg"
-		width="14"
-		height="14"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="2"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-		><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path
-			d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"
-		/></svg
-	>
-{/snippet}

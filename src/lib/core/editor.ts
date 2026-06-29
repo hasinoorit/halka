@@ -6,6 +6,15 @@ import { Query } from './query.js';
 import { Transform } from './transform.js';
 import { HalkaSelection } from './selection.js';
 import { InputManager } from './input.js';
+import type { Action, ChangeEventDetail, TransactionMeta, InsertContentOptions } from '../history/types.js';
+import { captureEditableSnapshot } from '../history/capture.js';
+import { captureSelection } from '../history/selection.js';
+
+export type { Action, ChangeEventDetail, TransactionMeta, InsertContentOptions } from '../history/types.js';
+
+export function getChangeHtml(data: string | ChangeEventDetail): string {
+	return typeof data === 'string' ? data : data.html;
+}
 
 export type HalkaPlugin = (editor: Editor) => () => void;
 
@@ -86,7 +95,7 @@ export interface EditorStatePayloadMap {
 }
 
 export interface EditorEventMap {
-	change: string;
+	change: string | ChangeEventDetail;
 	formatChange: void;
 	[event: string]: unknown;
 }
@@ -113,6 +122,8 @@ export abstract class Editor {
 	private _pendingStyles: Map<string, string>;
 	private _suppressedFormats: Set<string>;
 	private _inputManager: InputManager;
+	historyContext: { transactionActions: Action[] } | null = null;
+	isComposing = false;
 
 	constructor(root: HTMLElement) {
 		this.root = root;
@@ -251,8 +262,8 @@ export abstract class Editor {
 
 	abstract getHTML(): string;
 	abstract setHTML(html: string): void;
-	abstract insertHTML(html: string): void;
-	abstract insertText(text: string): void;
+	abstract insertHTML(html: string, options?: InsertContentOptions): void;
+	abstract insertText(text: string, options?: InsertContentOptions): void;
 	abstract getSelection(): Selection | null;
 	abstract getRange(): Range;
 	abstract setSelection(range: Range): void;
@@ -270,7 +281,11 @@ export abstract class Editor {
 	): HTMLElementTagNameMap[K];
 	abstract createEl(tagName: string, options?: ElementCreationOptions): HTMLElement;
 	abstract createText(text: string): Text;
-	abstract runTransaction(cb: (editor: Editor) => void): void;
+	abstract runTransaction(cb: (editor: Editor) => void, meta?: TransactionMeta): void;
+
+	pushHistoryActions(actions: Action[]): void {
+		this.historyContext?.transactionActions.push(...actions);
+	}
 	destroy(): void {
 		this._inputManager.destroy();
 	}
@@ -339,6 +354,9 @@ export class HalkaEditor extends Editor {
 	private handleSelectionChangeBound: () => void;
 	private handleBlurBound: () => void;
 	private handleFocusBound: () => void;
+	private handleCompositionStartBound: () => void;
+	private handleCompositionEndBound: () => void;
+	private transactionDepth = 0;
 	private savedSelectionRange: Range | undefined;
 	private savedSelectionOffsets: { start: number; end: number } | undefined;
 	private activeFormats: Record<string, boolean> = {};
@@ -361,6 +379,13 @@ export class HalkaEditor extends Editor {
 		this.handleSelectionChangeBound = () => this.updateActiveFormatsAndStyles();
 		this.handleBlurBound = () => this.saveSelection();
 		this.handleFocusBound = () => this.handleFocus();
+		this.handleCompositionStartBound = () => {
+			this.isComposing = true;
+		};
+		this.handleCompositionEndBound = () => {
+			this.isComposing = false;
+			this.emit('compositionend');
+		};
 
 		if (this.options.shortcuts) {
 			this.root.addEventListener('keydown', this.handleKeydownBound);
@@ -372,6 +397,8 @@ export class HalkaEditor extends Editor {
 		this.window.document.addEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.addEventListener('blur', this.handleBlurBound);
 		this.root.addEventListener('focus', this.handleFocusBound);
+		this.root.addEventListener('compositionstart', this.handleCompositionStartBound);
+		this.root.addEventListener('compositionend', this.handleCompositionEndBound);
 
 		this.pluginCleanups = (this.options.plugins ?? []).map((plugin) => plugin(this));
 		this.registerDefaultNormalizers();
@@ -461,45 +488,53 @@ export class HalkaEditor extends Editor {
 		return this.root.innerHTML;
 	}
 
-	setHTML(html: string): void {
+	setHTML(html: string, meta?: TransactionMeta): void {
 		this.runTransaction((editor) => {
 			(editor as HalkaEditor).root.innerHTML = html;
 			this.savedSelectionRange = undefined;
 			this.savedSelectionOffsets = undefined;
 			const selection = this.window.getSelection();
 			if (selection) selection.removeAllRanges();
-		});
+		}, meta);
 	}
 
-	insertHTML(html: string): void {
-		this.runTransaction(() => {
-			const selection = this.getSelection();
-			if (!selection) return;
+	insertHTML(html: string, options?: InsertContentOptions): void {
+		this.runTransaction(
+			() => {
+				const selection = this.getSelection();
+				const range =
+					options?.range?.cloneRange() ??
+					(selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
+				if (!range || !this.root.contains(range.commonAncestorContainer)) return;
 
-			const range = selection.getRangeAt(0);
-			range.deleteContents();
-			const fragment = range.createContextualFragment(html);
+				RangeHelpers.expandRangeForVoidNodes(range);
 
-			const lastNode = fragment.lastChild;
-			if (!lastNode) return;
+				const emptyBlock = !this.inline ? this.findEmptyBlockForInsertion(range) : null;
 
-			const emptyBlock = !this.inline ? this.findEmptyBlockForInsertion(range) : null;
-			if (emptyBlock?.parentNode) {
-				const parent = emptyBlock.parentNode;
-				while (fragment.firstChild) {
-					parent.insertBefore(fragment.firstChild, emptyBlock);
+				range.deleteContents();
+				const fragment = range.createContextualFragment(html);
+
+				const lastNode = fragment.lastChild;
+				if (!lastNode) return;
+
+				if (emptyBlock?.parentNode) {
+					const parent = emptyBlock.parentNode;
+					while (fragment.firstChild) {
+						parent.insertBefore(fragment.firstChild, emptyBlock);
+					}
+					emptyBlock.remove();
+					this.selection.setCursorAfter(lastNode);
+					return;
 				}
-				emptyBlock.remove();
-				this.selection.setCursorAfter(lastNode);
-				return;
-			}
 
-			range.insertNode(fragment);
-			this.selection.setCursorAfter(lastNode);
-		});
+				range.insertNode(fragment);
+				this.selection.setCursorAfter(lastNode);
+			},
+			{ history: options?.history ?? 'group' }
+		);
 	}
 
-	insertText(text: string): void {
+	insertText(text: string, options?: InsertContentOptions): void {
 		if (this.inline) {
 			text = text.replace(/[\r\n]+/g, ' ');
 		} else if (/[\r\n]/.test(text)) {
@@ -507,17 +542,24 @@ export class HalkaEditor extends Editor {
 			return;
 		}
 
-		this.runTransaction(() => {
-			const selection = this.getSelection();
-			if (!selection) return;
+		this.runTransaction(
+			() => {
+				const selection = this.getSelection();
+				const range =
+					options?.range?.cloneRange() ??
+					(selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null);
+				if (!range || !this.root.contains(range.commonAncestorContainer)) return;
 
-			const range = selection.getRangeAt(0);
-			range.deleteContents();
-			const textNode = this.window.document.createTextNode(text);
-			range.insertNode(textNode);
+				RangeHelpers.expandRangeForVoidNodes(range);
 
-			this.selection.setCursorAfter(textNode);
-		});
+				range.deleteContents();
+				const textNode = this.window.document.createTextNode(text);
+				range.insertNode(textNode);
+
+				this.selection.setCursorAfter(textNode);
+			},
+			{ history: options?.history ?? 'group' }
+		);
 	}
 
 	getRange(): Range {
@@ -843,7 +885,8 @@ export class HalkaEditor extends Editor {
 		const html = this.getHTML();
 		if (html === this.lastReportedHTML) return;
 		this.lastReportedHTML = html;
-		this.emit('change', html);
+		const detail: ChangeEventDetail = { html, phase: 'after' };
+		this.emit('change', detail);
 	}
 
 	private needsDocumentNormalization(): boolean {
@@ -914,8 +957,18 @@ export class HalkaEditor extends Editor {
 		this.selection.normalize();
 	}
 
-	runTransaction(cb: (editor: Editor) => void): void {
+	runTransaction(cb: (editor: Editor) => void, meta: TransactionMeta = {}): void {
+		const historyMode = meta.history ?? 'record';
 		const beforeHTML = this.getHTML();
+		const selectionBefore = captureSelection(this);
+		const beforeSnapshot =
+			historyMode !== 'skip'
+				? captureEditableSnapshot(this.root, selectionBefore)
+				: undefined;
+
+		this.transactionDepth += 1;
+		const parentContext = this.historyContext;
+		this.historyContext = { transactionActions: [] };
 
 		const currentSelection = this.window.getSelection();
 		const hasActiveSelection =
@@ -924,9 +977,10 @@ export class HalkaEditor extends Editor {
 			this.root.contains(currentSelection.getRangeAt(0).commonAncestorContainer);
 
 		const preMutationOffsets =
-			hasActiveSelection && currentSelection!.rangeCount > 0
+			meta.preferredSelection ??
+			(hasActiveSelection && currentSelection!.rangeCount > 0
 				? this.computeSelectionOffsets(currentSelection!.getRangeAt(0))
-				: this.savedSelectionOffsets;
+				: this.savedSelectionOffsets);
 
 		const offsetsAtStart = this.savedSelectionOffsets
 			? { start: this.savedSelectionOffsets.start, end: this.savedSelectionOffsets.end }
@@ -942,13 +996,14 @@ export class HalkaEditor extends Editor {
 
 		const offsetsAfterCb = this.savedSelectionOffsets;
 		const selectionWasExplicit =
-			!!offsetsAfterCb &&
-			(!offsetsAtStart ||
-				offsetsAfterCb.start !== offsetsAtStart.start ||
-				offsetsAfterCb.end !== offsetsAtStart.end);
+			!!meta.preferredSelection ||
+			(!!offsetsAfterCb &&
+				(!offsetsAtStart ||
+					offsetsAfterCb.start !== offsetsAtStart.start ||
+					offsetsAfterCb.end !== offsetsAtStart.end));
 
 		const preferredOffsets = selectionWasExplicit
-			? offsetsAfterCb
+			? (meta.preferredSelection ?? offsetsAfterCb)
 			: preMutationOffsets;
 
 		let merged = false;
@@ -989,6 +1044,10 @@ export class HalkaEditor extends Editor {
 			this.reconcileSelectionAfterMutation(preferredOffsets);
 		}
 
+		const transactionActions = [...this.historyContext.transactionActions];
+		this.historyContext = parentContext;
+		this.transactionDepth -= 1;
+
 		const afterHTML = this.getHTML();
 		if (afterHTML !== beforeHTML) {
 			const selection = this.window.getSelection();
@@ -999,19 +1058,43 @@ export class HalkaEditor extends Editor {
 					? this.computeSelectionOffsets(selection.getRangeAt(0))
 					: null;
 
+			// For non-collapsed (range) selections that the callback didn't
+			// explicitly change, the offsets captured BEFORE mutation are
+			// authoritative — a helper's DOM surgery (e.g. surround) may have
+			// corrupted or collapsed the live range. We force-restore those.
+			const preIsRange = !!preMutationOffsets && preMutationOffsets.start !== preMutationOffsets.end;
+			const forceRestore = !selectionWasExplicit && preIsRange;
+
+			// Collapsed carets are left to the post-callback live selection, which
+			// may intentionally land in a new empty node (e.g. a fresh list item)
+			// that text offsets cannot represent.
 			const offsetsToRestore = selectionWasExplicit
-				? offsetsAfterCb
-				: postMutationOffsets ?? offsetsAfterCb ?? preMutationOffsets;
+				? (meta.preferredSelection ?? offsetsAfterCb)
+				: forceRestore
+					? preMutationOffsets
+					: postMutationOffsets ?? offsetsAfterCb ?? preMutationOffsets;
 
 			this.normalizeHTML();
 
-			// Prefer the still-valid live range (it can represent carets in empty
-			// blocks that integer offsets cannot), falling back to offsets only when
-			// normalization detached the caret node. Callbacks that need a specific
-			// selection must leave it reflected in the live DOM selection (e.g. via
-			// setSelection/applySelection(true)).
-			this.reconcileSelectionAfterMutation(offsetsToRestore);
-			this.reportContentChangeIfNeeded();
+			this.reconcileSelectionAfterMutation(offsetsToRestore, forceRestore);
+
+			if (historyMode !== 'skip' && beforeSnapshot) {
+				const selectionAfter = captureSelection(this);
+				const afterSnapshot = captureEditableSnapshot(this.root, selectionAfter);
+				const detail: ChangeEventDetail = {
+					html: afterHTML,
+					phase: 'after',
+					snapshot: afterSnapshot,
+					beforeSnapshot,
+					transactionActions,
+					historyMode,
+					preferredSelection: meta.preferredSelection
+				};
+				this.lastReportedHTML = afterHTML;
+				this.emit('change', detail);
+			} else {
+				this.reportContentChangeIfNeeded();
+			}
 		}
 	}
 
@@ -1023,6 +1106,8 @@ export class HalkaEditor extends Editor {
 		this.window.document.removeEventListener('selectionchange', this.handleSelectionChangeBound);
 		this.root.removeEventListener('blur', this.handleBlurBound);
 		this.root.removeEventListener('focus', this.handleFocusBound);
+		this.root.removeEventListener('compositionstart', this.handleCompositionStartBound);
+		this.root.removeEventListener('compositionend', this.handleCompositionEndBound);
 
 		for (const cleanup of this.pluginCleanups) {
 			cleanup();
@@ -1258,16 +1343,20 @@ export class HalkaEditor extends Editor {
 	}
 
 	private reconcileSelectionAfterMutation(
-		offsets?: { start: number; end: number }
+		offsets?: { start: number; end: number },
+		force: boolean = false
 	): void {
 		const selection = this.window.getSelection();
 		if (!selection) return;
 
-		const liveRange = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-		if (liveRange && this.isRangeInRoot(liveRange)) {
-			this.selection.normalize();
-			this.saveSelection();
-			return;
+		// Unless forced to apply the provided offsets, keep a valid live range.
+		if (!force) {
+			const liveRange = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+			if (liveRange && this.isRangeInRoot(liveRange)) {
+				this.selection.normalize();
+				this.saveSelection();
+				return;
+			}
 		}
 
 		const restoreOffsets = offsets ?? this.savedSelectionOffsets;

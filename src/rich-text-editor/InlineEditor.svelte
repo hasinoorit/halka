@@ -2,6 +2,7 @@
 	import { onMount, onDestroy, type Snippet } from 'svelte';
 	import { HalkaEditor } from 'halka';
 	import { linkPlugin } from 'halka/plugins/link';
+	import { pastePlugin } from 'halka/plugins/paste';
 	import { placeholderPlugin } from 'halka/plugins/placeholder';
 	import Button from './ui/button.svelte';
 	import ColorPicker from './ui/color-picker.svelte';
@@ -44,7 +45,7 @@
 		if (editorElement) {
 			editor = new HalkaEditor(editorElement, {
 				inline: true,
-				plugins: [linkPlugin, placeholderPlugin('Write something here...')],
+				plugins: [linkPlugin, pastePlugin(), placeholderPlugin('Write something here...')],
 				shortcuts: true
 			});
 			editor.onShortcut('enter', (e: KeyboardEvent) => {

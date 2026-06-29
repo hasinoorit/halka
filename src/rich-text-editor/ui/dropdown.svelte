@@ -17,15 +17,26 @@
 		children?: Snippet;
 		className?: string;
 		align?: 'left' | 'right';
+		disabled?: boolean;
+		isOpen?: boolean;
 		onOpen?: () => void;
 	}
 
-	let { trigger, items, children, className = '', align = 'left', onOpen }: Props = $props();
+	let {
+		trigger,
+		items,
+		children,
+		className = '',
+		align = 'left',
+		disabled = false,
+		isOpen = $bindable(false),
+		onOpen
+	}: Props = $props();
 
-	let isOpen = $state(false);
 	let container = $state<HTMLDivElement>();
 
 	function toggle() {
+		if (disabled) return;
 		isOpen = !isOpen;
 		if (isOpen && onOpen) onOpen();
 	}
@@ -46,7 +57,7 @@
 	});
 </script>
 
-<div class="rte-dropdown {className}" bind:this={container}>
+<div class="rte-dropdown {className}" class:rte-dropdown--disabled={disabled} bind:this={container}>
 	<div
 		onclick={toggle}
 		role="button"
@@ -98,6 +109,11 @@
 	.rte-dropdown {
 		position: relative;
 		display: inline-block;
+	}
+
+	.rte-dropdown--disabled {
+		opacity: 0.5;
+		pointer-events: none;
 	}
 
 	.rte-dropdown-menu {

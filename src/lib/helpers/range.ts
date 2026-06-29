@@ -159,7 +159,6 @@ const surround = (elementDOM: HTMLElement, win?: Window, providedRange?: Range):
 		range.collapse(true);
 	} else {
 		range.selectNodeContents(elementDOM);
-		range.collapse(false);
 	}
 
 	focusEditableElement(win);
@@ -499,6 +498,26 @@ function findTextPositionAtOffset(
 	return null;
 }
 
+const VOID_RANGE_TAGS = new Set(['IMG', 'BR', 'HR', 'INPUT', 'IFRAME']);
+
+/**
+ * When a range boundary sits on a void element node (e.g. setStart(img, 0)),
+ * expand it so deleteContents includes the full element.
+ */
+function expandRangeForVoidNodes(range: Range): void {
+	if (range.collapsed) return;
+
+	const start = range.startContainer;
+	if (isElementNode(start) && VOID_RANGE_TAGS.has(start.tagName)) {
+		range.setStartBefore(start);
+	}
+
+	const end = range.endContainer;
+	if (isElementNode(end) && VOID_RANGE_TAGS.has(end.tagName)) {
+		range.setEndAfter(end);
+	}
+}
+
 function createRangeByOffsets(editor: HTMLElement, start: number, end: number): Range | null {
 	let startPos = findTextPositionAtOffset(editor, start, true, false);
 	let endPos = findTextPositionAtOffset(editor, end, false, true);
@@ -565,5 +584,6 @@ export {
 	undo,
 	unwrapWith,
 	createRangeByOffsets,
-	restoreSelectionByOffsets
+	restoreSelectionByOffsets,
+	expandRangeForVoidNodes
 };

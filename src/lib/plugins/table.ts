@@ -27,6 +27,7 @@ export type TableCellActiveState = {
 
 export type TableActiveState = {
 	cell: TableCellActiveState | null;
+	canMerge: boolean;
 };
 
 declare module '../core/editor.js' {
@@ -52,12 +53,23 @@ declare module '../core/editor.js' {
 
 export const tablePlugin: HalkaPlugin = (editor) => {
 	const root = editor.root;
-	const getActiveCell = () => {
+	const getPrimarySelectedCell = (): HTMLTableCellElement | null => {
+		const selected = root.querySelector('td.halka-selected-cell, th.halka-selected-cell');
+		return selected instanceof HTMLTableCellElement ? selected : null;
+	};
+
+	const getActiveCell = (): HTMLTableCellElement | null => {
 		const node = editor.getRange().commonAncestorContainer;
 		if (isElementNode(node) && (node.tagName === 'TD' || node.tagName === 'TH')) {
 			return node as HTMLTableCellElement;
 		}
-		return (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest?.('td, th, table') as HTMLElement | null;
+		const fromRange = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest?.(
+			'td, th'
+		) as HTMLTableCellElement | null;
+		if (fromRange) {
+			return fromRange;
+		}
+		return getPrimarySelectedCell();
 	};
 	const getColumnIndexForCell = (cell: HTMLTableCellElement) => {
 		const row = cell.parentElement as HTMLTableRowElement;
@@ -68,9 +80,15 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 		}
 		return -1;
 	};
-	const getActiveRow = () => {
+	const getActiveRow = (): HTMLTableRowElement | null => {
+		const cell = getActiveCell();
+		if (cell?.parentElement instanceof HTMLTableRowElement) {
+			return cell.parentElement;
+		}
 		const node = editor.getRange().commonAncestorContainer;
-		return (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest?.('tr') as HTMLTableRowElement | null;
+		return (node.nodeType === Node.TEXT_NODE ? node.parentElement : node as HTMLElement)?.closest?.(
+			'tr'
+		) as HTMLTableRowElement | null;
 	};
 
 	type TableCellPosition = {
@@ -408,6 +426,7 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 
 	const handleMouseUp = () => {
 		isSelecting = false;
+		editor.emit('formatChange');
 	};
 
 	const injectStyles = () => {
@@ -602,17 +621,19 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 		});
 	};
 
+	const canMergeCells = (): boolean =>
+		getClassSelectedCells() !== null || getSelectedCells() !== null;
+
 	const getTableActiveState = (): TableActiveState | null => {
 		if (editor.query.findClosest('TABLE') === null) {
 			return null;
 		}
 
-		const cell = editor.query.matchPath(
-			(node): node is HTMLTableCellElement => node instanceof HTMLTableCellElement
-		);
+		const canMerge = canMergeCells();
+		const cell = getActiveCell();
 
 		if (!(cell instanceof HTMLTableCellElement)) {
-			return { cell: null };
+			return { cell: null, canMerge };
 		}
 
 		const colSpan = cell.colSpan || 1;
@@ -624,7 +645,8 @@ export const tablePlugin: HalkaPlugin = (editor) => {
 				colSpan,
 				rowSpan,
 				isMerged: colSpan > 1 || rowSpan > 1
-			}
+			},
+			canMerge
 		};
 	};
 
